@@ -120,6 +120,16 @@ static const uint8_t ble_midi_packet_nbytes_mask = 0x03;
 #define MIDI_SERVICE_HEADER(x) (0x80 | (((x) >> 7) & 0x3F) )
 #define MIDI_SERVICE_TIMESTAMP_LOW(x) (0x80 | ((x) & 0x7F))
 
+static uint16_t midi_service_timestamp_decode(uint16_t* msb, uint8_t lsb, uint8_t* prev_lsb)
+{
+    // time has to either stand still or go forward
+    if (*prev_lsb > lsb) {
+        *msb++;
+    }
+    *prev_lsb = lsb;
+    return ((*msb) | ((lsb) & 0x7F));
+}
+
 static btstack_packet_callback_registration_t hci_event_callback_registration;
 static btstack_packet_handler_t client_packet_handler;
 typedef struct {
@@ -637,6 +647,7 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
         return 0;
     }
     uint16_t timestamp = ((uint16_t)(pkt[0] & 0x3f)) << 7;
+    uint8_t prev_lsb = 0;
     uint16_t ndecoded = 1;
     uint8_t running_status = 0;
     uint8_t running_status_nbytes = 0;
@@ -645,18 +656,19 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
     // check to see if the start of the packet is sysex continuation data
     if ((pkt[ndecoded] & 0x80) == 0) {
         // This has to be sysex continuation data or an error that we can't detect easily
+        // ##### TODO move this block to a function
         mes.nbytes = ble_midi_packet_is_sysex;
         uint8_t idx = 0;
         while (ndecoded < nbytes && (pkt[ndecoded] & 0x80) == 0) {
             mes.msg_bytes[idx++] = pkt[ndecoded++];
             mes.nbytes++;
             if (idx == 3) {
-                idx = 0;
-                mes.nbytes = ble_midi_packet_is_sysex;
                 if (!midi_service_stream_push(&context->from_ble, (uint8_t*)&mes, sizeof(mes))) {
                     ndecoded -= 3;
                     return ndecoded;
                 }
+                idx = 0;
+                mes.nbytes = ble_midi_packet_is_sysex;
             }
         }
         uint8_t bytecount = (mes.nbytes & ble_midi_packet_nbytes_mask);
@@ -668,6 +680,7 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
             // if MSB==1 in the BLE packet, it could be a real-time message's timestamp or EOX message's timestamp
             mes.nbytes = ble_midi_packet_is_sysex;
         }
+        // ##### END TODO
     }
     while (ndecoded < nbytes) {
         // message start usually is a timestamp followed by a status byte
@@ -676,7 +689,7 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
                 // As long as it is not a sysex message, this is a timestamp followed by a status byte
                 if ((mes.nbytes & ble_midi_packet_is_sysex) == 0) {
                     // 1st byte is the timestamp; 2nd byte is status byte
-                    mes.timestamp_ms = timestamp | MIDI_SERVICE_TIMESTAMP_LOW(pkt[ndecoded++]);
+                    mes.timestamp_ms = midi_service_timestamp_decode(&timestamp, pkt[ndecoded++], &prev_lsb);
                     mes.msg_bytes[0] = pkt[ndecoded++];
                     if (mes.msg_bytes[0] >= 0xF8) {
                         mes.nbytes = ble_midi_packet_is_real_time + 1;
@@ -738,12 +751,12 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
                             mes.msg_bytes[idx++] = pkt[ndecoded++];
                             mes.nbytes++;
                             if (idx == 3) {
-                                idx = 0;
-                                mes.nbytes = ble_midi_packet_is_sysex;
                                 if (!midi_service_stream_push(&context->from_ble, (uint8_t*)&mes, sizeof(mes))) {
                                     ndecoded -= 3;
                                     return ndecoded;
                                 }
+                                idx = 0;
+                                mes.nbytes = ble_midi_packet_is_sysex;
                             }
                         }
                         uint8_t bytecount = (mes.nbytes & ble_midi_packet_nbytes_mask);
@@ -767,7 +780,7 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
                     // This is a real-time message timestamp and status byte within a sysex message
                     ble_midi_message_t mes_rt = {0, {0,0,0}, 0};
                     mes_rt.nbytes = ble_midi_packet_is_real_time + 1;
-                    mes_rt.timestamp_ms = timestamp | MIDI_SERVICE_TIMESTAMP_LOW(pkt[ndecoded++]);
+                    mes_rt.timestamp_ms = midi_service_timestamp_decode(&timestamp, pkt[ndecoded++], &prev_lsb);
                     mes_rt.msg_bytes[0] = pkt[ndecoded++];
                     if (!midi_service_stream_push(&context->from_ble, (uint8_t*)&mes_rt, sizeof(mes_rt))) {
                         ndecoded -= 2;
@@ -780,12 +793,12 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
                         mes.msg_bytes[idx++] = pkt[ndecoded++];
                         mes.nbytes++;
                         if (idx == 3) {
-                            idx = 0;
-                            mes.nbytes = ble_midi_packet_is_sysex;
                             if (!midi_service_stream_push(&context->from_ble, (uint8_t*)&mes, sizeof(mes))) {
                                 ndecoded -= 3;
                                 return ndecoded;
                             }
+                            idx = 0;
+                            mes.nbytes = ble_midi_packet_is_sysex;
                         }
                     }
                     bytecount = (mes.nbytes & ble_midi_packet_nbytes_mask);
@@ -813,7 +826,7 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
             else if ((pkt[ndecoded] & 0x80) != 0 && (pkt[ndecoded+1] & 0x80) == 0) {
                 // This pattern could be a channel message running status timestamp followed by the channel message data byte(s)
                 if (running_status != 0 && (ndecoded + running_status_nbytes) <= nbytes) {
-                    mes.timestamp_ms = timestamp | MIDI_SERVICE_TIMESTAMP_LOW(pkt[ndecoded++]);
+                    mes.timestamp_ms = midi_service_timestamp_decode(&timestamp, pkt[ndecoded++], &prev_lsb);
                     mes.msg_bytes[0] = running_status;
                     mes.nbytes = running_status_nbytes | ble_midi_packet_is_channel;
                     for (uint8_t idx = 1; idx < running_status_nbytes; idx++) {
@@ -830,9 +843,9 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
                 }
             }
             else if ((pkt[ndecoded] & 0x80) == 0 && (pkt[ndecoded+1] & 0x80) == 0) {
-                if (running_status == mes.msg_bytes[0] && (mes.nbytes & ble_midi_packet_is_channel) != 0 &&  (ndecoded + running_status_nbytes) <= nbytes) {
+                if (running_status == mes.msg_bytes[0] && (mes.nbytes & ble_midi_packet_is_channel) != 0 &&  (ndecoded + running_status_nbytes - 1) <= nbytes) {
                     // this is a running status channel message same as previous message with the same timestamp and new data
-                    // status byte is already correct
+                    // status byte is already correct, and the there are enough data bytes in the undecoded (at least the full message length - 1)
                     for (uint8_t idx = 1; idx < running_status_nbytes; idx++) {
                         mes.msg_bytes[idx] = pkt[ndecoded++];
                     }
