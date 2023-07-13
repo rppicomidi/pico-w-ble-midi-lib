@@ -54,6 +54,7 @@ uint8_t midi_service_stream_write(uint8_t nbytes, uint8_t* midi_stream_bytes);
  * This function removes any Bluetooth MIDI running status from the byte stream
  * to simplify parsing for the application that calls this function
  *
+ * @param con_handle the HCI connection handle for the connection providing the MIDI stream
  * @param max_bytes The length of the midi_stream_bytes array
  * @param midi_stream_bytes a pointer to the MIDI 1.0 formatted byte stream storage
  * @param timestamp a pointer to the MIDI byte stream message timestamp. If this
@@ -61,4 +62,4 @@ uint8_t midi_service_stream_write(uint8_t nbytes, uint8_t* midi_stream_bytes);
  * @return uint8_t the number of bytes read for the timestamped byte stream or
  * zero if there are no more bytes to read
  */
-uint8_t midi_service_stream_read(uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp);
+uint8_t midi_service_stream_read(hci_con_handle_t con_handle, uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp);
