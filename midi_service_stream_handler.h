@@ -43,7 +43,7 @@ void midi_service_stream_init(btstack_packet_handler_t packet_handler);
  * @param midi_stream_bytes a pointer to the MIDI 1.0 byte stream storage
  * @return uint8_t the number of bytes successfully written
  */
-uint8_t midi_service_stream_write(uint8_t nbytes, uint8_t* midi_stream_bytes);
+uint8_t midi_service_stream_write(hci_con_handle_t con_handle, uint8_t nbytes, uint8_t* midi_stream_bytes);
 
 /**
  * @brief read a MIDI 1.0 byte stream for a single timestamp up to max_bytes long
