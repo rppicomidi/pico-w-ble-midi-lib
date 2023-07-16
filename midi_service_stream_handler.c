@@ -119,7 +119,7 @@ static uint16_t midi_service_timestamp_decode(uint16_t* msb, uint8_t lsb, uint8_
 {
     // time has to either stand still or go forward
     if (*prev_lsb > lsb) {
-        *msb++;
+        *msb += 1;
     }
     *prev_lsb = lsb;
     return ((*msb) | ((lsb) & 0x7F));
@@ -182,24 +182,6 @@ static uint16_t midi_service_stream_get_system_13_bit_ms_timestamp()
     return (uint16_t)((time_us_32()/1000) & 0x1FFF);
 }
 
-#if 0
-static uint16_t midi_service_stream_flush_rt_midi(ring_buffer_t* midi_buffer, to_ble_midi_stream_t* ble_midi_stream)
-{
-    uint16_t ret = 0;
-    for (uint8_t idx = 0; idx < ble_midi_stream->npending_rt; idx++) {
-        ble_midi_message_t rt_pkt;
-        rt_pkt.timestamp_ms = ble_midi_stream->pending_rt_timestamp[idx];
-        ble_midi_stream->previous_timestamp = rt_pkt.timestamp_ms;
-        rt_pkt.nbytes = ble_midi_packet_is_real_time | 1;
-        rt_pkt.msg_bytes[0] = ble_midi_stream->pending_rt_status[idx];
-        ++ret;
-        ring_buffer_push(midi_buffer, (uint8_t*)&rt_pkt, sizeof(rt_pkt));
-    }
-    ble_midi_stream->npending_rt = 0;
-    return ret;
-}
-#endif
-
 static void midi_service_stream_add_header_if_needed(ble_midi_packet_t* pkt, uint16_t timestamp)
 {
     if (pkt->nbytes == 0) {
@@ -255,6 +237,9 @@ static void midi_service_stream_encode_bt_pkt(midi_service_stream_connection_t* 
         ble_midi_stream->pending_ble_pkt.nbytes = 0;
         ble_midi_stream->pending_ble_midi_pkt_running_status = 0;
     }
+    else if ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_channel) != 0) {
+        ble_midi_stream->pending_ble_midi_pkt_running_status = ble_midi_stream->mes.msg_bytes[0];
+    }
     midi_service_stream_add_header_if_needed(&ble_midi_stream->pending_ble_pkt, ble_midi_stream->mes.timestamp_ms);
     if (needs_timestamp) {
         ble_midi_stream->pending_ble_pkt.pkt[ble_midi_stream->pending_ble_pkt.nbytes++] = MIDI_SERVICE_TIMESTAMP_LOW(ble_midi_stream->mes.timestamp_ms);
@@ -277,6 +262,20 @@ static void midi_service_stream_request_send(midi_service_stream_connection_t* c
     midi_service_server_request_can_send_now(&context->send_request, context->connection_handle);
 }
 
+static void midi_service_stream_discard_stream(uint8_t* midi_stream, uint16_t nbytes, to_ble_midi_stream_t* ble_midi_stream)
+{
+    printf("MIDI stream error\r\ndiscarding unsent MIDI bytes:\r\n");
+    ble_midi_stream->next_msg_byte_idx = 0;
+    ble_midi_stream->previous_timestamp = 0xffff; // illegal value
+    ble_midi_stream->running_status = 0;
+    ble_midi_stream->is_sysex = 0;
+    ble_midi_stream->npending_rt = 0;
+    ble_midi_stream->mes.nbytes = 0;
+    ble_midi_stream->mes.timestamp_ms = 0xffff;
+    ble_midi_stream->npending_rt = 0;
+    printf_hexdump(midi_stream, nbytes);
+}
+
 uint16_t midi_service_stream_push_midi(uint8_t* midi_stream, uint16_t nbytes, midi_service_stream_connection_t* context)
 {
     uint16_t timestamp = midi_service_stream_get_system_13_bit_ms_timestamp();
@@ -297,6 +296,14 @@ uint16_t midi_service_stream_push_midi(uint8_t* midi_stream, uint16_t nbytes, mi
                 ble_midi_stream->next_msg_byte_idx = 1;
             }
             else if (ms_byte == 0xF7) {
+                if ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_sysex) == 0) {
+                    // terminated a sysex message without being inside a sysex message.
+                    // Something went wrong with the MIDI stream or this design
+                    // Discard the pending message and pending real-time messages
+                    midi_service_stream_discard_stream(midi_stream, nbytes, ble_midi_stream);
+
+                    return bytes_pushed;
+                }
                 // end of system exclusive
                 if (ble_midi_stream->next_msg_byte_idx != 0) {
                     // encode all the sysex data bytes and the potential start of sysex
@@ -313,54 +320,23 @@ uint16_t midi_service_stream_push_midi(uint8_t* midi_stream, uint16_t nbytes, mi
                 ble_midi_stream->is_sysex = 0;
             }
             else if (ms_byte >= 0xF8) {
-                if (ble_midi_stream->next_msg_byte_idx == 0 || ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_sysex) == 0 && ble_midi_stream->mes.timestamp_ms >= timestamp)) {
-                    // #### TODO put the following into a function
-                    // This real-time message can be pushed now without de-interleaving timestamps
-                    ble_midi_stream->pending_rt_status[ble_midi_stream->npending_rt] = ms_byte;
-                    ble_midi_stream->pending_rt_timestamp[ble_midi_stream->npending_rt++] = timestamp;
-                    ++bytes_pushed;
-                    if (ble_midi_stream->npending_rt >= sizeof(ble_midi_stream->pending_rt_status)) {
-                        // Something went wrong with the MIDI stream or this design
-                        // Discard the pending message and pending real-time messages
-                        ble_midi_stream->next_msg_byte_idx = 0;
-                        ble_midi_stream->previous_timestamp = 0xffff; // illegal value
-                        ble_midi_stream->running_status = 0;
-                        ble_midi_stream->is_sysex = 0;
-                        ble_midi_stream->npending_rt = 0;
-                        ble_midi_stream->mes.nbytes = 0;
-                        ble_midi_stream->mes.timestamp_ms = 0xffff;
-                        ble_midi_stream->npending_rt = 0;
-
-                        return bytes_pushed;
-                    }
-
-                    midi_service_stream_flush_rt_midi_to_pkt(context);
-                    //midi_service_server_request_can_send_now(&context->send_request, context->connection_handle);
+                if ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_sysex) != 0 && (ble_midi_stream->mes.nbytes & ble_midi_packet_nbytes_mask) > 0) {
+                    // empty out the pending packet; it is OK for real-time to occur anywhere inside a sysex message
+                    midi_service_stream_encode_bt_pkt(context);
+                    context->to_ble_midi_stream.next_msg_byte_idx = 0;
+                    ble_midi_stream->mes.nbytes = ble_midi_packet_is_sysex;
                 }
-                else {
-                    // This message is in the middle of a system common or channel message or an incomplete first SysEx packet
-                    // that has a timestamp later than the partially constructed message the real-time message interrupted
-                    // Pushing the real-time message now will cause timestamps to be non-monotonic. Enqueue the real-time message
-                    // and timestamp instead and push it only after the longer message gets pushed. The queue is long enough to hold
-                    // up to 4 real-time status bytes and timestamps. That is one more than the worst case I could think of, which
-                    // is an active sense, MIDI clock, and Start, Stop or Continue message all interrupting the same message.
-                    ble_midi_stream->pending_rt_status[ble_midi_stream->npending_rt] = ms_byte;
-                    ble_midi_stream->pending_rt_timestamp[ble_midi_stream->npending_rt++] = timestamp;
-                    if (ble_midi_stream->npending_rt >= sizeof(ble_midi_stream->pending_rt_status)) {
-                        // Something went wrong with the MIDI stream or this design
-                        // Discard the pending message and pending real-time messages
-                        ble_midi_stream->next_msg_byte_idx = 0;
-                        ble_midi_stream->previous_timestamp = 0xffff; // illegal value
-                        ble_midi_stream->running_status = 0;
-                        ble_midi_stream->is_sysex = 0;
-                        ble_midi_stream->npending_rt = 0;
-                        ble_midi_stream->mes.nbytes = 0;
-                        ble_midi_stream->mes.timestamp_ms = 0xffff;
-                        ble_midi_stream->npending_rt = 0;
+                ble_midi_stream->pending_rt_status[ble_midi_stream->npending_rt] = ms_byte;
+                ble_midi_stream->pending_rt_timestamp[ble_midi_stream->npending_rt++] = timestamp;
+                ++bytes_pushed;
+                if (ble_midi_stream->npending_rt >= sizeof(ble_midi_stream->pending_rt_status)) {
+                    // Something went wrong with the MIDI stream or this design
+                    // Discard the pending message and pending real-time messages
+                    midi_service_stream_discard_stream(midi_stream, nbytes, ble_midi_stream);
 
-                        return bytes_pushed;
-                    }
+                    return bytes_pushed;
                 }
+                midi_service_stream_flush_rt_midi_to_pkt(context);
             }
             else if (ms_byte > 0xF0) {
                 // system common message
@@ -380,7 +356,6 @@ uint16_t midi_service_stream_push_midi(uint8_t* midi_stream, uint16_t nbytes, mi
                 }
                 else {
                     ble_midi_stream->mes.nbytes = 1;
-                    //midi_service_stream_request_send(context);
                     midi_service_stream_encode_full_bt_pkt(context);
                     ble_midi_stream->mes.nbytes = 0;
                 }
@@ -409,19 +384,17 @@ uint16_t midi_service_stream_push_midi(uint8_t* midi_stream, uint16_t nbytes, mi
                 ble_midi_stream->mes.msg_bytes[ble_midi_stream->next_msg_byte_idx++] = ms_byte;
                 ++ble_midi_stream->mes.nbytes;
                 ++bytes_pushed;
-                uint8_t len = ble_midi_stream->mes.nbytes & ble_midi_packet_nbytes_mask;
                 if (ble_midi_stream->next_msg_byte_idx >= 3) {
                     //midi_service_stream_request_send(context);
                     midi_service_stream_encode_full_bt_pkt(context);
                     ble_midi_stream->mes.timestamp_ms = ble_midi_stream->previous_timestamp;
-                    ble_midi_stream->mes.nbytes = ble_midi_packet_is_sysex;
+                    ble_midi_stream->mes.nbytes = ble_midi_packet_is_sysex; // set length to 0
                 }
             }
             else if ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_channel) != 0 && ble_midi_stream->next_msg_byte_idx == 0)  {                
                 if (ble_midi_stream->running_status == 0 || ble_midi_stream->running_status != ble_midi_stream->mes.msg_bytes[0]) {
                     // stream error
-                    ble_midi_stream->next_msg_byte_idx = 0;
-                    ble_midi_stream->mes.nbytes = 0;
+                    midi_service_stream_discard_stream(midi_stream, nbytes, ble_midi_stream);
                     return bytes_pushed;
                 }
                 else {
@@ -430,7 +403,6 @@ uint16_t midi_service_stream_push_midi(uint8_t* midi_stream, uint16_t nbytes, mi
                     ++bytes_pushed;
                     ble_midi_stream->next_msg_byte_idx = 2;
                     if ((ble_midi_stream->mes.nbytes & ble_midi_packet_nbytes_mask) == ble_midi_stream->next_msg_byte_idx) {
-                        //midi_service_stream_request_send(context);
                         midi_service_stream_encode_full_bt_pkt(context);
                     }
                 }
@@ -442,7 +414,6 @@ uint16_t midi_service_stream_push_midi(uint8_t* midi_stream, uint16_t nbytes, mi
                     ble_midi_stream->mes.msg_bytes[ble_midi_stream->next_msg_byte_idx++] = ms_byte;
                     ++bytes_pushed;
                     if (len == ble_midi_stream->next_msg_byte_idx) {
-                        //midi_service_stream_request_send(context);
                         midi_service_stream_encode_full_bt_pkt(context);
                         if ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_channel) == 0) {
                             ble_midi_stream->mes.nbytes = 0;
@@ -450,9 +421,8 @@ uint16_t midi_service_stream_push_midi(uint8_t* midi_stream, uint16_t nbytes, mi
                     }
                 }
                 else {
-                     // stream error
-                    ble_midi_stream->next_msg_byte_idx = 0;
-                    ble_midi_stream->mes.nbytes = 0;
+                    // stream error
+                    midi_service_stream_discard_stream(midi_stream, nbytes, ble_midi_stream);
                     return bytes_pushed;
                 }
             }
@@ -469,104 +439,6 @@ uint16_t midi_service_stream_push_midi(uint8_t* midi_stream, uint16_t nbytes, mi
     }
     return bytes_pushed;
 }
-#if 0
-/**
- * @brief build a SDU to send over Bluetooth LE from timestamped MIDI packets in midi_buffer
- * 
- * @param sdu a pointer to a byte array long enough to hold the MIDI data packet to transmit
- * @param mtu_payload the maximum size of the SDU payload
- * @param midi_buffer the ring buffer containing timestamped MIDI messages
- * @param conn_interval the connection interval, in milliseconds
- * @return uint16_t the number of bytes stored in the sdu for sending
- */
-uint16_t midi_service_stream_pop_midi_to_ble(uint8_t* sdu, uint16_t mtu_payload, ring_buffer_t* midi_buffer, uint16_t conn_interval)
-{
-    typedef struct {
-        uint8_t timestamp;
-        uint8_t status_byte;
-    } ble_real_time_msg_t;
-
-    ble_midi_message_t pkt;
-
-    if (ring_buffer_peek(midi_buffer, (uint8_t*)&pkt, sizeof(pkt)) != sizeof(pkt)) {
-        return 0;
-    }
-
-    // the pkt will add to the SDU the length of the data in pkt.msg_bytes +
-    // any pre-pended or appended sysex status bytes + the length of a timestamp byte + the length of the header byte
-    uint16_t len = (pkt.nbytes & ble_midi_packet_nbytes_mask) + ((pkt.nbytes & ble_midi_packet_is_start_sysex) != 0) + ((pkt.nbytes & ble_midi_packet_is_eox) != 0) + 2;
-    if (len > mtu_payload) {
-        return 0; // mtu would have to be pathologically small for this to happen, but it could be programming error
-    }
-    uint8_t running_status = 0;
-    uint16_t npopped = 0;
-    uint16_t first_timestamp = pkt.timestamp_ms;
-    uint16_t previous_timestamp = 0xffff; // illegal timestamp
-    sdu[npopped++] = MIDI_SERVICE_HEADER(first_timestamp);
-    // while the ring buffer is not empty, there is still space in the BLE ATT packet, and the packet is within the
-    // time window of the packet timestamps.
-    while ((npopped + len) < mtu_payload && (pkt.timestamp_ms - first_timestamp) < conn_interval) {
-        if (ring_buffer_pop(midi_buffer, (uint8_t*)&pkt, sizeof(pkt)) != sizeof(pkt)) {
-            return npopped; // this would be unexpected because we did a peek first
-        }
-        if (pkt.nbytes & ble_midi_packet_is_start_sysex) {
-            sdu[npopped++] = MIDI_SERVICE_TIMESTAMP_LOW(pkt.timestamp_ms);
-            previous_timestamp = pkt.timestamp_ms;
-            sdu[npopped++] = 0xF0;
-        }
-        bool is_chan = (pkt.nbytes & ble_midi_packet_is_channel) != 0;
-        bool is_sysex = (pkt.nbytes & ble_midi_packet_is_sysex) != 0;
-        // defer timestamp decision until parsing msg_bytes for channel messages
-        // sysex payload does not get a timestamp low byte.
-        if (!is_chan && !is_sysex) {
-            sdu[npopped++] = MIDI_SERVICE_TIMESTAMP_LOW(pkt.timestamp_ms);
-            previous_timestamp = pkt.timestamp_ms;
-        }
-        for (int idx = 0; idx < (pkt.nbytes & ble_midi_packet_nbytes_mask); idx++) {
-            if (idx == 0 && is_chan) {
-                if (pkt.msg_bytes[0] == running_status) {
-                    // can only omit timestamp if the same as previous one
-                    if (pkt.timestamp_ms != previous_timestamp) {
-                        sdu[npopped++] = MIDI_SERVICE_TIMESTAMP_LOW(pkt.timestamp_ms);
-                        previous_timestamp = pkt.timestamp_ms;
-                    }
-                    continue;
-                }
-                else {
-                    // every new status byte needs a timestamp
-                    sdu[npopped++] = MIDI_SERVICE_TIMESTAMP_LOW(pkt.timestamp_ms);
-                    running_status = pkt.msg_bytes[0]; 
-                    previous_timestamp = pkt.timestamp_ms;
-                }
-            }
-            sdu[npopped++] = pkt.msg_bytes[idx];
-        }
-        if (pkt.nbytes & ble_midi_packet_is_eox) {
-            sdu[npopped++] = MIDI_SERVICE_TIMESTAMP_LOW(pkt.timestamp_ms);
-            previous_timestamp = pkt.timestamp_ms;
-            sdu[npopped++] = 0xF7;
-        }
-        if (ring_buffer_peek(midi_buffer, (uint8_t*)&pkt, sizeof(pkt)) != sizeof(pkt)) {
-            // no more data in the midi_buffer ring buffer
-            return npopped;
-        }
-
-        // the pkt will add to the SDU the length of the data in pkt.msg_bytes +
-        // any pre-pended or appended sysex status bytes + the length of a timestamp byte
-        len = (pkt.nbytes & ble_midi_packet_nbytes_mask) + ((pkt.nbytes & ble_midi_packet_is_start_sysex) != 0) + ((pkt.nbytes & ble_midi_packet_is_eox) != 0) + 1;
-        // The len equation above might over-estimate the reqired length for channel messages if running status applies
-        if ((pkt.nbytes & ble_midi_packet_is_channel) != 0) {
-            if (pkt.msg_bytes[0] == running_status) {
-                --len;
-                if (pkt.timestamp_ms == previous_timestamp) {
-                    --len;
-                }
-            }
-        }
-    }
-    return npopped;
-}
-#endif
 // Return the context that contains connection_handle ==  con_handle;
 // call with con_handle to HCI_CON_HANDLE_INVALID to find an available context
 midi_service_stream_connection_t* get_context_for_conn_handle(hci_con_handle_t con_handle)
@@ -582,7 +454,6 @@ midi_service_stream_connection_t* get_context_for_conn_handle(hci_con_handle_t c
 static void midi_can_send(void * void_context)
 {
     midi_service_stream_connection_t* context = (midi_service_stream_connection_t*)void_context;
-    to_ble_midi_stream_t* ble_midi_stream = &context->to_ble_midi_stream;
     ble_midi_packet_t pending_ble_pkt;
 
     if (ring_buffer_pop(&context->to_ble, (uint8_t*)&pending_ble_pkt, sizeof(pending_ble_pkt)) == sizeof(pending_ble_pkt)) {
@@ -596,66 +467,6 @@ static void midi_can_send(void * void_context)
         midi_service_server_request_can_send_now(&context->send_request, context->connection_handle);
     }
 }
-#if 0
-static void midi_can_send(void * void_context)
-{
-    midi_service_stream_connection_t* context = (midi_service_stream_connection_t*)void_context;
-    uint16_t nbytes_to_send = 0;
-    ble_midi_message_t pkt;
-    uint8_t running_status = 0; // illegal status message
-    uint16_t prev_timestamp = 0xffff; // illegal timestamp
-    uint8_t nvals = ring_buffer_peek(&context->to_ble, (uint8_t *)&pkt, sizeof(pkt));
-    uint16_t max_packet = att_server_get_mtu(context->connection_handle) - 3;
-    assert(max_packet < sizeof(context->to_ble_midi_stream.pending_ble_midi_packet));
-    if (nvals > 0 && pkt.nbytes > 0) {
-        // at least one packet to send; write out the header
-        context->to_ble_midi_stream.pending_ble_midi_packet[nbytes_to_send++] = 0x80 | ((pkt.timestamp_ms >> 7) & 0x3F);
-    }
-    // continue to load up the buffer until there is no more data to send or
-    // there is more data to send than what will fit in the ATT server MTU.
-    while (nvals > 0 && (((pkt.nbytes& 7) + 1) + nbytes_to_send) < max_packet) {
-        nvals = ring_buffer_pop(&context->to_ble, (uint8_t *)&pkt, sizeof(pkt));
-
-        if ((pkt.nbytes & 0x80) == 0) {
-            // Not sysex continuation message; first byte is a status byte for sure
-            uint8_t idx = 0;
-            if (pkt.msg_bytes[0] >= 0x80 && pkt.msg_bytes[0] < 0xF0) {
-                // channel message
-                if (running_status == pkt.msg_bytes[0]) {
-                    ++idx; // don't need to write the status byte again
-                }
-            }
-            if (idx == 0) {
-                // not running status or not a channel message
-                context->to_ble_midi_stream.pending_ble_midi_packet[nbytes_to_send++] = MIDI_SERVICE_TIMESTAMP_LOW(pkt.timestamp_ms);
-                context->to_ble_midi_stream.pending_ble_midi_packet[nbytes_to_send++] = pkt.msg_bytes[idx++];
-            }
-            else if (pkt.timestamp_ms != prev_timestamp) {
-                // write the next timestamp
-                context->to_ble_midi_stream.pending_ble_midi_packet[nbytes_to_send++] = MIDI_SERVICE_TIMESTAMP_LOW(pkt.timestamp_ms);
-            }                
-            prev_timestamp = pkt.timestamp_ms;
-            for (; idx < (pkt.nbytes & 0x7); idx++) {
-                if (pkt.msg_bytes[idx] > 0x7F) {
-                    // new status byte; need a new timestamp low byte
-                    MIDI_SERVICE_TIMESTAMP_LOW(pkt.timestamp_ms);
-                }
-                context->to_ble_midi_stream.pending_ble_midi_packet[nbytes_to_send++] = pkt.msg_bytes[idx];
-            }
-        }
-        else {
-
-        }
-        nvals = ring_buffer_peek(&context->to_ble, (uint8_t *)&pkt, sizeof(pkt));
-    }
-
-    // send
-    midi_service_server_send(context->connection_handle, context->to_ble_midi_stream.pending_ble_midi_packet,nbytes_to_send);
-
-    // request next send event
-    // midi_service_server_request_can_send_now(&context->send_request, context->connection_handle);
-} 
-#endif
 
 static void hci_packet_handler (uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size){
     UNUSED(channel);
@@ -726,7 +537,6 @@ static uint16_t midi_service_stream_ble_midi_decode_push(uint8_t* pkt, uint16_t 
     uint16_t ndecoded = 1;
     uint8_t running_status = 0;
     uint8_t running_status_nbytes = 0;
-    uint8_t pending_msg_length = 0;
     ble_midi_message_t mes = {0, {0,0,0}, 0};
     // check to see if the start of the packet is sysex continuation data
     if ((pkt[ndecoded] & 0x80) == 0) {
@@ -1011,14 +821,14 @@ static void att_packet_handler (uint8_t packet_type, uint16_t channel, uint8_t *
                     if (!context) break;
                     // use the connection handle from this notification going forward
                     context->connection_handle = att_event_connected_get_handle(packet);
-                    printf("%c: ATT connected, handle 0x%04x, max MIDI packet len %u\n", context->name, context->connection_handle, sizeof(context->to_ble_midi_stream.pending_ble_pkt.pkt));
+                    printf("%s: ATT connected, handle 0x%04x, max MIDI packet len %u\n", context->name, context->connection_handle, sizeof(context->to_ble_midi_stream.pending_ble_pkt.pkt));
                     break;
                 case ATT_EVENT_MTU_EXCHANGE_COMPLETE:
                     mtu = att_event_mtu_exchange_complete_get_MTU(packet) - 3;
                     context = get_context_for_conn_handle(att_event_mtu_exchange_complete_get_handle(packet));
                     if (!context) break;
                     context->ble_mtu = btstack_min(mtu - 3, sizeof(context->to_ble_midi_stream.pending_ble_pkt.pkt));
-                    printf("%c: ATT MTU = %u => max MIDI packet len %u\n", context->name, mtu, context->ble_mtu);
+                    printf("%s: ATT MTU = %u => max MIDI packet len %u\n", context->name, mtu, context->ble_mtu);
                     break;
                 case ATT_EVENT_CAN_SEND_NOW:
                     //TODO send pending data
@@ -1028,7 +838,7 @@ static void att_packet_handler (uint8_t packet_type, uint16_t channel, uint8_t *
                     context = get_context_for_conn_handle(att_event_disconnected_get_handle(packet));
                     if (!context) break;
                     // free connection
-                    printf("%c: ATT disconnected, handle 0x%04x\n", context->name, context->connection_handle);                    
+                    printf("%s: ATT disconnected, handle 0x%04x\n", context->name, context->connection_handle);
                     context->le_notification_enabled = 0;
                     context->connection_handle = HCI_CON_HANDLE_INVALID;
                     break;
@@ -1047,7 +857,9 @@ void midi_service_stream_init(btstack_packet_handler_t packet_handler)
         midi_service_stream_connection_t* context = midi_service_stream_connection+idx;
         context->connection_handle = HCI_CON_HANDLE_INVALID;
         midi_service_stream_init_ring_buffers(context);
-        printf("midi_service_stream_connection[%u]=%p\r\n", idx, context);
+        char name[] = "MIDI A";
+        name[5] += idx;
+        strcpy(context->name, name);
     }
     // register for HCI events
     hci_event_callback_registration.callback = &hci_packet_handler;

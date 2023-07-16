@@ -26,8 +26,6 @@
 // Uncomment the example below to do that
 //#include "hardware/irq.h"
 //
-//#define RING_BUFFER_ENTER_CRITICAL(X) \
-//    do {irq_set_enabled(ring_buf->critical_section_data, false);} while (0)
+//#define RING_BUFFER_ENTER_CRITICAL(X) do {irq_set_enabled(ring_buf->critical_section_data, false);} while (0)
 //
-//#define RING_BUFFER_EXIT_CRITICAL(X) \
-//    do {irq_set_enabled(ring_buf->critical_section_data, true);} while (0)```
+//#define RING_BUFFER_EXIT_CRITICAL(X)  do {irq_set_enabled(ring_buf->critical_section_data, true);} while (0)
