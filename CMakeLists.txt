@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.13)
 
 set(target_lib ble_midi_service_lib)
 add_library(${target_lib} INTERFACE)
-# add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../lib/ring_buffer_lib ring_buffer_lib)
 target_sources(${target_lib} INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/midi_service_server.c
     ${CMAKE_CURRENT_LIST_DIR}/midi_service_stream_handler.c
@@ -10,7 +9,7 @@ target_sources(${target_lib} INTERFACE
 
 target_include_directories(${target_lib} INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}
-    ${CMAKE_CURRENT_LIST_DIR}/../lib/ring_buffer_lib ring_buffer_lib
+    ${CMAKE_CURRENT_LIST_DIR}/../ring_buffer_lib ring_buffer_lib
 )
 
 target_include_directories(${target_lib} INTERFACE
