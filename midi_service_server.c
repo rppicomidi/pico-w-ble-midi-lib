@@ -1,5 +1,6 @@
 /**
- * MIT License
+ * The portion of the software below that is totally original to rppicomidi
+ * uses the following MIT License
  *
  * Copyright (c) 2023 rppicomidi
  *
@@ -21,6 +22,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  *
+ */
+
+/**
+ * To the extent this code is solely for use on the Rapsberry Pi Pico W or
+ * Pico WH, the license file ${PICO_SDK_PATH}/src/rp2_common/pico_btstack/LICENSE.RP may
+ * apply.
+ * 
  */
 
 /**
@@ -136,10 +144,6 @@ static int midi_service_write_callback(hci_con_handle_t con_handle, uint16_t att
 	return 0;
 }
 
-/**
- * @brief Init MIDI Service Server with ATT DB
- * @param callback for tx data from peer
- */
 void midi_service_server_init(btstack_packet_handler_t packet_handler){
 
     static const uint8_t midi_profile_uuid128[] = { 0x03, 0xB8, 0x0E, 0x5A, 0xED, 0xE8, 0x4B, 0x33, 0xA7, 0x51, 0x6C, 0xE3, 0x4E, 0xC4, 0xC7, 0x00 };
@@ -172,21 +176,10 @@ void midi_service_server_init(btstack_packet_handler_t packet_handler){
 	att_server_register_service_handler(&midi_service);
 }
 
-/** 
- * @brief Queue send request. When called, one packet can be sent via midi_service_server_send below
- * @param request
- * @param con_handle
- */
 void midi_service_server_request_can_send_now(btstack_context_callback_registration_t* request, hci_con_handle_t con_handle){
 	att_server_request_to_send_notification(request, con_handle);
 }
 
-/**
- * @brief Send data via notify
- * @param con_handle
- * @param data
- * @param size
- */
 int midi_service_server_send(hci_con_handle_t con_handle, const uint8_t * data, uint16_t size){
 	return att_server_notify(con_handle, midi_tx_value_handle, data, size);
 }
