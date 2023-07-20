@@ -4,6 +4,7 @@ set(target_lib ble_midi_service_lib)
 add_library(${target_lib} INTERFACE)
 target_sources(${target_lib} INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/midi_service_server.c
+    ${CMAKE_CURRENT_LIST_DIR}/ble_midi_pkt_codec.c
     ${CMAKE_CURRENT_LIST_DIR}/midi_service_stream_handler.c
 )
 

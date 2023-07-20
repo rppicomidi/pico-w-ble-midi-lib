@@ -5,7 +5,9 @@ and a higher layer MIDI 1.0 packet encoder and decoder. It
 implements the [Specification for MIDI over Bluetooth Low Energy
 (BLE-MIDI) 1.0](https://midi.org/specifications/midi-transports-specifications/midi-over-bluetooth-low-energy-ble-midi).
 Downloading this standard requires a free login from the
-midi.org website. It expects to be built using `pico-sdk` version
+[midi.org](https://midi.org/) website.
+
+It expects to be built using `pico-sdk` version
 1.5.1 or later and it expects to execute on a Raspberry Pi Pico W board
 with a RP2040 processor and a WiFi/Bluetooth module
 that uses the Infineon CYW43439 WiFi/Bluetooth chip. For a simple
@@ -22,24 +24,8 @@ and then send the encoded data to the connected BLE-MIDI client.
 When the BLE-MIDI client sends BLE-MIDI 1.0 data to this server, the
 server code decodes the packet to an array of time-stamped byte stream
 structures and buffers them for the application to process.
-It is up to the application to use the timestamps to handle the time
-stamps for presentation order and jitter reduction.
-
-The application must initialize the stdio system, the Bluetooth module,
-the L2CAP layer, the SM layer, and the ATT layer. For example:
-```
-    stdio_init_all();
-    // initialize CYW43 driver architecture (will enable BT if/because CYW43_ENABLE_BLUETOOTH == 1)
-    if (cyw43_arch_init()) {
-        printf("failed to initialise cyw43_arch\n");
-        return -1;
-    }
-    l2cap_init();
-
-    sm_init();
-
-    att_server_init(profile_data, NULL, NULL);
-```
+It is up to the application to handle the timestamps
+for presentation order and jitter reduction.
 
 The `profile_data` argument of `att_server_init()` function should
 be automatically generated from a `.gatt` file that has the
@@ -48,12 +34,12 @@ builds the code, it should generate the GATT database `.h` file
 using the `compile_gatt.py` Python script contained in the
 BlueKitchen Bluetooth stack path ${PICO_SDK_PATH}/lib/btstack/tool/compile_gatt.py.
 The application should include this `.h` file because it contains
-the definition of the `profile_data` variable.
-Make sure to invoke the Python script with the option "-I[path to this directory]"
+the definition of the `profile_data` variable for the GATT server.
+Invoke the Python script with the option `-I[path to this directory]`
 or else the script won't be able to find the file referenced
 in the line `#import <midi_service.gatt>`.
 
-The file `midi_server_stream_handler.h`` contains the user API. The user
+The file `midi_server_stream_handler.h` contains the user API. The user
 application must call `midi_service_stream_init()` before it uses the
 other two functions. The user application must call this function
 with a non-NULL pointer to a `btstack_packet_handler_t` packet
@@ -86,5 +72,10 @@ The files in this directory require the following libraries:
     pico_cyw43_arch_none
     ring_buffer_lib
 ```
+
 The `ring_buffer_lib` library is custom code that can be found
-[here](https://github.com/rppicomidi/ring_buffer_lib).
+[here](https://github.com/rppicomidi/ring_buffer_lib). The CMakeLists.txt
+for this project expects the `ring_buffer_lib` source directory to be
+located at the same directory level as the source files for this project.
+For example, if this project is a subdirectory of `proj/lib`, then
+the `ring_buffer_lib` source files should be stored in `proj/lib/ring_buffer_lib`.
