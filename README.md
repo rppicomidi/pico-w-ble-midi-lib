@@ -1,28 +1,35 @@
-# pico-w-ble-midi-service
+# pico-w-ble-midi-lib
 
-This project contains a GATT server for the BLE-MIDI service
+This library contains a GATT server for the BLE-MIDI service
 and a higher layer MIDI 1.0 packet encoder and decoder. It
 implements the [Specification for MIDI over Bluetooth Low Energy
 (BLE-MIDI) 1.0](https://midi.org/specifications/midi-transports-specifications/midi-over-bluetooth-low-energy-ble-midi).
 Downloading this standard requires a free login from the
-[midi.org](https://midi.org/) website.
+[midi.org](https://midi.org/) website. Implementing a BLE-MIDI
+client library is coming soon.
 
-It expects to be built using `pico-sdk` version
+This library expects to be built using `pico-sdk` version
 1.5.1 or later and it expects to execute on a Raspberry Pi Pico W board
 with a RP2040 processor and a WiFi/Bluetooth module
-that uses the Infineon CYW43439 WiFi/Bluetooth chip. For a simple
-example that uses this project to send and receive MIDI data,
-see [the pico-w-ble-midi-server-demo](https://github.com/rppicomidi/pico-w-ble-midi-server-demo)
+that uses the Infineon CYW43439 WiFi/Bluetooth chip.
+
+## BLE-MIDI server library
+For a simple example that uses this library to send and receive MIDI data,
+see the [pico-w-ble-midi-server-demo](https://github.com/rppicomidi/pico-w-ble-midi-server-demo)
+project. For a more practical demo, see the [ble-midi2usbhost](https://github.com/rppicomidi/ble-midi2usbhost)
 project.
 
-This project enables the user application to send and receive MIDI 1.0 data
+This library enables the user application to send and receive MIDI 1.0 data
 via standard MIDI 1.0 byte streams. The application sends this code
-simple MIDI 1.0 byte streams; the server will automatically encode the
-MIDI byte stream to BLE-MIDI 1.0 packets time-stamped with the system time
-and then send the encoded data to the connected BLE-MIDI client.
+simple MIDI 1.0 byte streams; the `ble_midi_service_lib` INTERFACE
+library will then use the `ble_midi_pkt_codec` INTERFACE library
+to encode the MIDI byte stream to BLE-MIDI 1.0 packets
+time-stamped with the system time, and will finally send the
+BLE-MIDI encoded data to the connected BLE-MIDI client.
 
 When the BLE-MIDI client sends BLE-MIDI 1.0 data to this server, the
-server code decodes the packet to an array of time-stamped byte stream
+`ble_midi_service_lib` works with the the `ble_midi_pkt_codec` to
+decode the packet to an array of time-stamped byte stream
 structures and buffers them for the application to process.
 It is up to the application to handle the timestamps
 for presentation order and jitter reduction.
@@ -79,3 +86,6 @@ for this project expects the `ring_buffer_lib` source directory to be
 located at the same directory level as the source files for this project.
 For example, if this project is a subdirectory of `proj/lib`, then
 the `ring_buffer_lib` source files should be stored in `proj/lib/ring_buffer_lib`.
+
+## BLE-MIDI client library
+TODO
