@@ -224,6 +224,19 @@ uint16_t ble_midi_pkt_codec_push_midi(uint8_t* midi_stream, uint16_t nbytes, ble
     to_ble_midi_stream_t* ble_midi_stream = &context->to_ble_midi_stream;
     while (bytes_pushed < nbytes && ble_midi_stream->pending_ble_pkt.nbytes < context->ble_mtu) {
         uint8_t ms_byte = midi_stream[bytes_pushed];
+#ifdef BLE_MIDI_SERVER_FILTER_MIDI_CLOCK_TO_BLE
+        if (ms_byte == 0xf8) {
+            ++bytes_pushed;
+            continue;
+        }
+#endif
+#ifdef BLE_MIDI_SERVER_FILTER_ACTIVE_SENSING_TO_BLE
+        if (ms_byte == 0xfe) {
+            // filter out for now
+            ++bytes_pushed;
+            continue;
+        }
+#endif
         if (ms_byte & 0x80) {
             // status byte; potential start of message
             if (ms_byte == 0xF0) {
