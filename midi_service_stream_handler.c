@@ -84,7 +84,6 @@ typedef struct midi_service_stream_connection_s {
     int le_notification_enabled;
     hci_con_handle_t connection_handle;
     btstack_context_callback_registration_t send_request;
-    bool waiting_for_send_notification_request;
     ble_midi_codec_data_t* ble_midi_pkt_codec_data;
     char name[7]; //"MIDI x" where x is A, B, C, D
 } midi_service_stream_connection_t;
@@ -100,13 +99,16 @@ static void midi_can_send(void * void_context)
 
     if (ble_midi_pkt_codec_ble_pkt_pop(&pending_ble_pkt, context->ble_midi_pkt_codec_data) == sizeof(pending_ble_pkt)) {
         midi_service_server_send(context->connection_handle, pending_ble_pkt.pkt, pending_ble_pkt.nbytes);
+        //printf_hexdump(pending_ble_pkt.pkt, pending_ble_pkt.nbytes);
+    }
+    else {
+        printf("No MIDI to send\r\n");
     }
     if (ble_midi_pkt_codec_ble_pkt_available(context->ble_midi_pkt_codec_data)) {
         // more packets in the buffer
-        midi_service_server_request_can_send_now(&context->send_request, context->connection_handle);        
-    }
-    else {
-        context->waiting_for_send_notification_request = false;
+        if (!midi_service_server_request_can_send_now(&context->send_request, context->connection_handle)) {
+            printf("midi_service_server_request_can_send_now failed\r\n");
+        }
     }
 }
 
@@ -130,8 +132,8 @@ static void hci_packet_handler (uint8_t packet_type, uint16_t channel, uint8_t *
 
                     // request min con interval 15 ms for iOS per Apple accessory design guidelines, so we have to allow it:
                     // https://developer.apple.com/accessories/Accessory-Design-Guidelines.pdf
-                    printf("LE Connection - Request 7.5ms-15 ms connection interval\n");
-                    gap_request_connection_parameter_update(con_handle, 6, 12, 4, 0x0048);
+                    printf("LE Connection - Request 7.5ms-15ms connection interval\n");
+                    gap_request_connection_parameter_update(con_handle, 6, 12, 0, 0x0048);
                     break;
                 case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:
                     // print connection parameters (without using float operations)
@@ -186,7 +188,6 @@ static void midi_service_stream_packet_handler(uint8_t packet_type, uint16_t cha
                     context = get_context_for_conn_handle(con_handle);
                     if (!context) break;
                     context->le_notification_enabled = 1;
-                    context->waiting_for_send_notification_request = false;
                     context->send_request.callback = midi_can_send;
                     context->send_request.context = context;
                     ble_midi_pkt_codec_init_data(context->ble_midi_pkt_codec_data, att_server_get_mtu(con_handle));
@@ -243,11 +244,7 @@ static void att_packet_handler (uint8_t packet_type, uint16_t channel, uint8_t *
                     context = get_context_for_conn_handle(att_event_mtu_exchange_complete_get_handle(packet));
                     if (!context) break;
                     ble_midi_pkt_codec_update_mtu(context->ble_midi_pkt_codec_data , mtu-3);
-                    //context->ble_mtu = btstack_min(mtu - 3, sizeof(context->to_ble_midi_stream.pending_ble_pkt.pkt));
                     printf("%s: ATT MTU = %u => max MIDI packet len %u\n", context->name, mtu, ble_midi_pkt_codec_get_mtu(context->ble_midi_pkt_codec_data));
-                    break;
-                case ATT_EVENT_CAN_SEND_NOW:
-                    //Nothing to do: send a packet with an empty payload
                     break;
                 case ATT_EVENT_DISCONNECTED:
                     context = get_context_for_conn_handle(att_event_disconnected_get_handle(packet));

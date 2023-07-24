@@ -52,8 +52,9 @@ void midi_service_server_init(btstack_packet_handler_t packet_handler);
  * @brief Queue send request. When called, one packet can be sent via ble_midi_service_send below
  * @param request
  * @param con_handle
+ * @return true if successful, false otherwise
  */
-void midi_service_server_request_can_send_now(btstack_context_callback_registration_t * request, hci_con_handle_t con_handle);
+bool midi_service_server_request_can_send_now(btstack_context_callback_registration_t * request, hci_con_handle_t con_handle);
 
 /**
  * @brief Send data

@@ -27,6 +27,13 @@ to encode the MIDI byte stream to BLE-MIDI 1.0 packets
 time-stamped with the system time, and will finally send the
 BLE-MIDI encoded data to the connected BLE-MIDI client.
 
+The [Accessory Guidelines for Apple Products](https://developer.apple.com/accessories/Accessory-Design-Guidelines.pdf)
+specifies a minumum connection interval of 15ms and latency of 30ms (i.e., 2 connection
+intervals). The `midi_service_stream_handler.c` code specifies a minimum interval
+of 7.5ms and a maximum interval of 15ms with a maximum latency of 4. My iPad consistently
+connects at 15ms with 0 latency. It is probably worth experimenting with this because
+ideally the connection interval would be 7.5 ms with 0 latency to minimize timing jitter and latency.
+
 When the BLE-MIDI client sends BLE-MIDI 1.0 data to this server, the
 `ble_midi_service_lib` works with the the `ble_midi_pkt_codec` to
 decode the packet to an array of time-stamped byte stream

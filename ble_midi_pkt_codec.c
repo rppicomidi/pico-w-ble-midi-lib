@@ -196,7 +196,7 @@ static void midi_service_stream_encode_full_bt_pkt(ble_midi_codec_data_t* contex
 {
     midi_service_stream_encode_bt_pkt(context);
     context->to_ble_midi_stream.next_msg_byte_idx = 0;
-    midi_service_stream_flush_rt_midi_to_pkt(context);
+    //midi_service_stream_flush_rt_midi_to_pkt(context);
 }
 
 
@@ -383,8 +383,8 @@ uint16_t ble_midi_pkt_codec_push_midi(uint8_t* midi_stream, uint16_t nbytes, ble
             ring_buffer_push(&context->to_ble, (uint8_t*)&ble_midi_stream->pending_ble_pkt, sizeof(ble_midi_stream->pending_ble_pkt));
             ble_midi_stream->pending_ble_pkt.nbytes = 0;
             ble_midi_stream->pending_ble_midi_pkt_running_status = 0;
+            *ready_to_send = true;
         }
-        *ready_to_send = true;
     }
     return bytes_pushed;
 }
@@ -631,5 +631,5 @@ uint16_t ble_midi_pkt_codec_ble_pkt_pop(ble_midi_packet_t* pkt, ble_midi_codec_d
 
 bool ble_midi_pkt_codec_ble_pkt_available(ble_midi_codec_data_t* context)
 {
-    return ring_buffer_get_num_bytes(&context->to_ble) == sizeof(ble_midi_packet_t);
+    return ring_buffer_get_num_bytes(&context->to_ble) >= sizeof(ble_midi_packet_t);
 }

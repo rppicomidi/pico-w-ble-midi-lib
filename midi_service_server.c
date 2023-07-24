@@ -74,6 +74,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 #include "pico/stdlib.h"
 #include "btstack_defines.h"
 #include "ble/att_db.h"
@@ -110,18 +111,19 @@ static uint16_t midi_service_read_callback(hci_con_handle_t con_handle, uint16_t
 	UNUSED(con_handle);
 	UNUSED(offset);
 	UNUSED(buffer_size);
-	
 	if (attribute_handle == midi_tx_client_configuration_handle){
 		if (buffer != NULL){
 			little_endian_store_16(buffer, 0, midi_tx_client_configuration_handle);
 		}
 		return 2;
 	}
+#if 0
     if (attribute_handle == midi_tx_value_handle) {
         // I think this should return a payload of 0 length
         uint8_t dummy;
         return att_read_callback_handle_blob(&dummy, 0, 0, buffer, buffer_size);
     }
+#endif
 	return 0;
 }
 
@@ -176,8 +178,8 @@ void midi_service_server_init(btstack_packet_handler_t packet_handler){
 	att_server_register_service_handler(&midi_service);
 }
 
-void midi_service_server_request_can_send_now(btstack_context_callback_registration_t* request, hci_con_handle_t con_handle){
-	att_server_request_to_send_notification(request, con_handle);
+bool midi_service_server_request_can_send_now(btstack_context_callback_registration_t* request, hci_con_handle_t con_handle){
+	return att_server_request_to_send_notification(request, con_handle) == ERROR_CODE_SUCCESS;
 }
 
 int midi_service_server_send(hci_con_handle_t con_handle, const uint8_t * data, uint16_t size){
