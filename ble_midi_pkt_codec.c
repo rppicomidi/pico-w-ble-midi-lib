@@ -51,6 +51,7 @@ typedef struct to_ble_midi_stream_s {
     uint16_t pending_rt_timestamp[4];           // buffer of pending real-time message timestamps
     ble_midi_packet_t pending_ble_pkt;          // packet currently being encoded from the message stream
     uint8_t pending_ble_midi_pkt_running_status; // the channel message running status of the pending BLE-MIDI packet
+    uint8_t pending_ble_midi_pkt_prev_status;   // the last encoded status message for the ble midi packet
 } to_ble_midi_stream_t;
 
 struct ble_midi_codec_data_s {
@@ -142,12 +143,14 @@ static void midi_service_stream_flush_rt_midi_to_pkt(ble_midi_codec_data_t* cont
             ring_buffer_push(&context->to_ble, (uint8_t*)&ble_midi_stream->pending_ble_pkt, sizeof(ble_midi_stream->pending_ble_pkt));
             ble_midi_stream->pending_ble_pkt.nbytes = 0;
             ble_midi_stream->pending_ble_midi_pkt_running_status = 0;
+            ble_midi_stream->pending_ble_midi_pkt_prev_status = 0;
         }
         if (ble_midi_stream->pending_ble_pkt.nbytes == 0) {
             ble_midi_stream->pending_ble_pkt.pkt[ble_midi_stream->pending_ble_pkt.nbytes++] = MIDI_SERVICE_HEADER(ble_midi_stream->pending_rt_timestamp[0]);
         }
         ble_midi_stream->pending_ble_pkt.pkt[ble_midi_stream->pending_ble_pkt.nbytes++] = MIDI_SERVICE_TIMESTAMP_LOW(ble_midi_stream->pending_rt_timestamp[idx]);
         ble_midi_stream->pending_ble_pkt.pkt[ble_midi_stream->pending_ble_pkt.nbytes++] = ble_midi_stream->pending_rt_status[idx];
+        ble_midi_stream->pending_ble_midi_pkt_prev_status = ble_midi_stream->pending_rt_status[idx];
     }
     ble_midi_stream->npending_rt = 0;
 }
@@ -166,21 +169,32 @@ static void midi_service_stream_encode_bt_pkt(ble_midi_codec_data_t* context)
     bool requires_byte0 = (((ble_midi_stream->mes.nbytes & ble_midi_packet_is_channel) != ble_midi_packet_is_channel) ||
              (ble_midi_stream->pending_ble_midi_pkt_running_status != ble_midi_stream->mes.msg_bytes[0]));
 
-    // Need to start the packet with a timestamp unless it is just sysex data or if channel message running status data with the same
-    // timestamp as the previous timestamp.
+    // Need to start the packet with a timestamp unless it is just sysex data or if
+    // it is a channel message running status data with the same
+    // timestamp as the previous timestamp not preceded by another status message.
     bool needs_timestamp = 
      (((ble_midi_stream->mes.nbytes & (ble_midi_packet_is_sysex | ble_midi_packet_is_start_sysex)) != ble_midi_packet_is_sysex) &&
-     (requires_byte0 || ble_midi_stream->previous_timestamp != ble_midi_stream->mes.timestamp_ms)) ;
-
+     (requires_byte0 || ble_midi_stream->previous_timestamp != ble_midi_stream->mes.timestamp_ms));
+    if (!needs_timestamp && ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_channel) == ble_midi_packet_is_channel) &&
+        ble_midi_stream->pending_ble_midi_pkt_prev_status != ble_midi_stream->pending_ble_midi_pkt_running_status) {
+        needs_timestamp = true;
+    }
     uint8_t first_byte_idx = (requires_byte0 ? 0:1);
     uint8_t total_bytes = nbytes + (needs_timestamp ? 1:0) - first_byte_idx;
     if ((ble_midi_stream->pending_ble_pkt.nbytes + total_bytes) >= context->ble_mtu) {
         ring_buffer_push(&context->to_ble, (uint8_t*)&ble_midi_stream->pending_ble_pkt, sizeof(ble_midi_stream->pending_ble_pkt));
         ble_midi_stream->pending_ble_pkt.nbytes = 0;
         ble_midi_stream->pending_ble_midi_pkt_running_status = 0;
+        ble_midi_stream->pending_ble_midi_pkt_prev_status = 0;
+        needs_timestamp = true;
+        requires_byte0 = true;
     }
-    else if ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_channel) != 0) {
+    if ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_channel) != 0) {
         ble_midi_stream->pending_ble_midi_pkt_running_status = ble_midi_stream->mes.msg_bytes[0];
+    }
+    // update the previously encoded status byte
+    if (ble_midi_stream->mes.msg_bytes[0] & 0x80) {
+        ble_midi_stream->pending_ble_midi_pkt_prev_status = ble_midi_stream->mes.msg_bytes[0];
     }
     midi_service_stream_add_header_if_needed(&ble_midi_stream->pending_ble_pkt, ble_midi_stream->mes.timestamp_ms);
     if (needs_timestamp) {
@@ -340,7 +354,7 @@ uint16_t ble_midi_pkt_codec_push_midi(uint8_t* midi_stream, uint16_t nbytes, ble
                     ble_midi_stream->mes.nbytes = ble_midi_packet_is_sysex; // set length to 0
                 }
             }
-            else if ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_channel) != 0 && ble_midi_stream->next_msg_byte_idx == 0)  {                
+            else if ((ble_midi_stream->mes.nbytes & ble_midi_packet_is_channel) != 0 && ble_midi_stream->next_msg_byte_idx == 0)  {
                 if (ble_midi_stream->running_status == 0 || ble_midi_stream->running_status != ble_midi_stream->mes.msg_bytes[0]) {
                     // stream error
                     midi_service_stream_discard_stream(midi_stream, nbytes, ble_midi_stream);
@@ -383,6 +397,7 @@ uint16_t ble_midi_pkt_codec_push_midi(uint8_t* midi_stream, uint16_t nbytes, ble
             ring_buffer_push(&context->to_ble, (uint8_t*)&ble_midi_stream->pending_ble_pkt, sizeof(ble_midi_stream->pending_ble_pkt));
             ble_midi_stream->pending_ble_pkt.nbytes = 0;
             ble_midi_stream->pending_ble_midi_pkt_running_status = 0;
+            ble_midi_stream->pending_ble_midi_pkt_prev_status = 0;
             *ready_to_send = true;
         }
     }
