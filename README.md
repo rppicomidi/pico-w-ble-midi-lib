@@ -5,13 +5,18 @@ and a higher layer MIDI 1.0 packet encoder and decoder. It
 implements the [Specification for MIDI over Bluetooth Low Energy
 (BLE-MIDI) 1.0](https://midi.org/specifications/midi-transports-specifications/midi-over-bluetooth-low-energy-ble-midi).
 Downloading this standard requires a free login from the
-[midi.org](https://midi.org/) website. Implementing a BLE-MIDI
-client library is coming soon.
+[midi.org](https://midi.org/) website. Adding support for a BLE-MIDI
+client to the library is coming soon.
 
 This library expects to be built using `pico-sdk` version
 1.5.1 or later and it expects to execute on a Raspberry Pi Pico W board
 with a RP2040 processor and a WiFi/Bluetooth module
 that uses the Infineon CYW43439 WiFi/Bluetooth chip.
+
+Before using this library in a commercial application, please read the
+`LICENSE` file and the comments in each source code header file. I
+have tried to structure this library to make as much code as possible
+MIT License.
 
 ## BLE-MIDI server library
 For a simple example that uses this library to send and receive MIDI data,
@@ -21,7 +26,7 @@ project.
 
 This library enables the user application to send and receive MIDI 1.0 data
 via standard MIDI 1.0 byte streams. The application sends this code
-simple MIDI 1.0 byte streams; the `ble_midi_service_lib` INTERFACE
+arrays of MIDI 1.0 byte streams; the `ble_midi_service_lib` INTERFACE
 library will then use the `ble_midi_pkt_codec` INTERFACE library
 to encode the MIDI byte stream to BLE-MIDI 1.0 packets
 time-stamped with the system time, and will finally send the
@@ -30,7 +35,7 @@ BLE-MIDI encoded data to the connected BLE-MIDI client.
 The [Accessory Guidelines for Apple Products](https://developer.apple.com/accessories/Accessory-Design-Guidelines.pdf)
 specifies a minumum connection interval of 15ms and latency of 30ms (i.e., 2 connection
 intervals). The `midi_service_stream_handler.c` code specifies a minimum interval
-of 7.5ms and a maximum interval of 15ms with a maximum latency of 4. My iPad consistently
+of 7.5ms and a maximum interval of 15ms with a maximum latency of 0. My iPad consistently
 connects at 15ms with 0 latency. It is probably worth experimenting with this because
 ideally the connection interval would be 7.5 ms with 0 latency to minimize timing jitter and latency.
 
