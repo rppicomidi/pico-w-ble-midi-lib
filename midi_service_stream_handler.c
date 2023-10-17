@@ -285,14 +285,15 @@ void midi_service_stream_init(btstack_packet_handler_t packet_handler)
 uint8_t midi_service_stream_write(hci_con_handle_t con_handle, uint8_t nbytes, uint8_t* midi_stream_bytes)
 {
     midi_service_stream_connection_t* context = get_context_for_conn_handle(con_handle);
+    uint16_t npushed = 0;
     if (context) {
         bool ready_to_send = false;
-        ble_midi_pkt_codec_push_midi(midi_stream_bytes, nbytes, context->ble_midi_pkt_codec_data, &ready_to_send);
+        npushed = ble_midi_pkt_codec_push_midi(midi_stream_bytes, nbytes, context->ble_midi_pkt_codec_data, &ready_to_send);
         if (ready_to_send) {
             midi_service_server_request_can_send_now(&context->send_request, context->connection_handle);
         }
     }
-    return 0;
+    return npushed;
 }
 
 uint8_t midi_service_stream_read(hci_con_handle_t con_handle, uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp)
