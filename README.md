@@ -99,5 +99,15 @@ located at the same directory level as the source files for this project.
 For example, if this project is a subdirectory of `proj/lib`, then
 the `ring_buffer_lib` source files should be stored in `proj/lib/ring_buffer_lib`.
 
+The `ring_buffer_lib` needs to have a configuration file called `ring_buffer_lib_config.h`
+stored somewhere in the project's include path. Because of the required ring
+buffer sizes to support this library, please define the `RING_BUFFER_SIZE_TYPE`
+macro to be a 16-bit data type or larger. For example
+```
+#define RING_BUFFER_SIZE_TYPE uint16_t
+```
+Note that the default definition is `uint8_t`, which is too small for Bluetooth
+MIDI ring buffers.
+
 ## BLE-MIDI client library
 TODO
