@@ -95,7 +95,7 @@ uint16_t ble_midi_pkt_codec_get_mtu(ble_midi_codec_data_t* context);
  * @param ready_to_send true if a full MIDI packet is ready to be sent
  * @return uint16_t the number of bytes pushed
  */
-uint16_t ble_midi_pkt_codec_push_midi(uint8_t* midi_stream, uint16_t nbytes, ble_midi_codec_data_t* context, bool* ready_to_send);
+uint16_t ble_midi_pkt_codec_push_midi(const uint8_t* midi_stream, uint16_t nbytes, ble_midi_codec_data_t* context, bool* ready_to_send);
 
 /**
  * @brief pop the least recently pushed decoded ble_midi_message_t timestamped MIDI 1.0

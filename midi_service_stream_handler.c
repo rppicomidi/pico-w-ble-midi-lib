@@ -282,7 +282,7 @@ void midi_service_stream_init(btstack_packet_handler_t packet_handler)
     client_packet_handler = packet_handler;
 }
 
-uint8_t midi_service_stream_write(hci_con_handle_t con_handle, uint8_t nbytes, uint8_t* midi_stream_bytes)
+uint8_t midi_service_stream_write(hci_con_handle_t con_handle, uint8_t nbytes, const uint8_t* midi_stream_bytes)
 {
     midi_service_stream_connection_t* context = get_context_for_conn_handle(con_handle);
     uint16_t npushed = 0;

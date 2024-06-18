@@ -24,7 +24,9 @@
  */
 #pragma once
 #include "midi_service_server.h"
-
+#ifdef __cplusplus
+    extern "C" {
+#endif
 /**
  * @brief initialize the MIDI service and MIDI parser/packet handlers
  * 
@@ -43,7 +45,7 @@ void midi_service_stream_init(btstack_packet_handler_t packet_handler);
  * @param midi_stream_bytes a pointer to the MIDI 1.0 byte stream storage
  * @return uint8_t the number of bytes successfully written
  */
-uint8_t midi_service_stream_write(hci_con_handle_t con_handle, uint8_t nbytes, uint8_t* midi_stream_bytes);
+uint8_t midi_service_stream_write(hci_con_handle_t con_handle, uint8_t nbytes, const uint8_t* midi_stream_bytes);
 
 /**
  * @brief read a MIDI 1.0 byte stream for a single timestamp up to max_bytes long
@@ -63,3 +65,6 @@ uint8_t midi_service_stream_write(hci_con_handle_t con_handle, uint8_t nbytes, u
  * zero if there are no more bytes to read
  */
 uint8_t midi_service_stream_read(hci_con_handle_t con_handle, uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp);
+#ifdef __cplusplus
+}
+#endif

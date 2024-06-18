@@ -214,7 +214,7 @@ static void midi_service_stream_encode_full_bt_pkt(ble_midi_codec_data_t* contex
 }
 
 
-static void midi_service_stream_discard_stream(uint8_t* midi_stream, uint16_t nbytes, to_ble_midi_stream_t* ble_midi_stream)
+static void midi_service_stream_discard_stream(const uint8_t* midi_stream, uint16_t nbytes, to_ble_midi_stream_t* ble_midi_stream)
 {
     printf("MIDI stream error\r\ndiscarding unsent MIDI bytes:\r\n");
     ble_midi_stream->next_msg_byte_idx = 0;
@@ -230,7 +230,7 @@ static void midi_service_stream_discard_stream(uint8_t* midi_stream, uint16_t nb
     printf("\r\n");
 }
 
-uint16_t ble_midi_pkt_codec_push_midi(uint8_t* midi_stream, uint16_t nbytes, ble_midi_codec_data_t* context, bool* ready_to_send)
+uint16_t ble_midi_pkt_codec_push_midi(const uint8_t* midi_stream, uint16_t nbytes, ble_midi_codec_data_t* context, bool* ready_to_send)
 {
     uint16_t timestamp = midi_service_stream_get_system_13_bit_ms_timestamp();
     uint16_t bytes_pushed = 0;
