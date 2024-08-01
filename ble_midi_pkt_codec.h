@@ -116,7 +116,7 @@ uint16_t ble_midi_pkt_codec_pop_midi(ble_midi_message_t* mes, ble_midi_codec_dat
  * @param context the data associated with a BLE-MIDI 1.0 connection
  * @return uint16_t the number of bytes from the pkt successfully pushed
  */
-uint16_t ble_midi_pkt_codec_ble_midi_decode_push(uint8_t* pkt, uint16_t nbytes, ble_midi_codec_data_t* context);
+uint16_t ble_midi_pkt_codec_ble_midi_decode_push(const uint8_t* pkt, uint16_t nbytes, ble_midi_codec_data_t* context);
 
 /**
  * @brief pop the next ble_midi_packet_t from the context's packet to send ring buffer

@@ -416,7 +416,7 @@ static bool midi_service_stream_push(ring_buffer_t* buf, uint8_t* data, RING_BUF
     return success;
 }
 
-static bool ble_midi_pkt_codec_decode_sysex_data(uint8_t* pkt, uint16_t nbytes, ble_midi_codec_data_t* context, ble_midi_message_t* mes, uint16_t* ndecoded, uint8_t idx)
+static bool ble_midi_pkt_codec_decode_sysex_data(const uint8_t* pkt, uint16_t nbytes, ble_midi_codec_data_t* context, ble_midi_message_t* mes, uint16_t* ndecoded, uint8_t idx)
 {
     while (*ndecoded < nbytes && (pkt[*ndecoded] & 0x80) == 0) {
         mes->msg_bytes[idx++] = pkt[(*ndecoded)++];
@@ -442,7 +442,7 @@ static bool ble_midi_pkt_codec_decode_sysex_data(uint8_t* pkt, uint16_t nbytes, 
     return true;
 }
 
-uint16_t ble_midi_pkt_codec_ble_midi_decode_push(uint8_t* pkt, uint16_t nbytes, ble_midi_codec_data_t* context)
+uint16_t ble_midi_pkt_codec_ble_midi_decode_push(const uint8_t* pkt, uint16_t nbytes, ble_midi_codec_data_t* context)
 {
     // The shortest possible packet would be a packet header with one sysex byte
     if (pkt == NULL || nbytes < 2) {
