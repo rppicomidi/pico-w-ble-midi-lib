@@ -50,7 +50,7 @@ static gatt_client_characteristic_t midi_data_io_characteristic;
 static gatt_client_notification_t notification_listener;
 static bool listener_registered = 0;
 static ble_midi_codec_data_t* ble_midi_pkt_codec_data;
-
+static btstack_context_callback_registration_t write_callback_registration;
 
 static void printUUID(uint8_t * uuid128, uint16_t uuid16){
     if (uuid16){
@@ -626,6 +626,33 @@ void ble_midi_client_request_disconnect(hci_con_handle_t handle)
         state = BLEMC_WAIT_FOR_DISCONNECTION;
         gap_disconnect(con_handle);
     }
+}
+
+static void handle_can_write_without_response(void * context)
+{
+    (void)context;
+    ble_midi_packet_t pkt;
+    if (ble_midi_pkt_codec_ble_pkt_pop(&pkt, ble_midi_pkt_codec_data))
+        gatt_client_write_value_of_characteristic_without_response(con_handle, midi_data_io_characteristic.value_handle, pkt.nbytes, pkt.pkt);
+}
+
+
+uint8_t ble_midi_client_stream_write(hci_con_handle_t con_handle_, uint8_t nbytes, const uint8_t* midi_stream_bytes)
+{
+    uint8_t bytes_written = 0;
+    if (con_handle_ == con_handle) {
+        bool ready_to_send = false;
+        bytes_written = ble_midi_pkt_codec_push_midi(midi_stream_bytes, nbytes, ble_midi_pkt_codec_data, &ready_to_send);
+        if (nbytes == bytes_written) {
+            if (ready_to_send) {
+                write_callback_registration.callback = handle_can_write_without_response;
+                write_callback_registration.context = NULL;
+
+                gatt_client_request_to_write_without_response(&write_callback_registration, con_handle);
+            }
+        }
+    }
+    return bytes_written;
 }
 
 uint8_t ble_midi_client_stream_read(hci_con_handle_t con_handle_, uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp)
