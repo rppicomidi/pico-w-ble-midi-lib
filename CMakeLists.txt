@@ -12,7 +12,7 @@ target_link_libraries(ble_midi_pkt_codec INTERFACE
 )
 
 add_library(ble_midi_service_lib INTERFACE)
-target_sources(ble_midi_pkt_codec INTERFACE
+target_sources(ble_midi_service_lib INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/midi_service_server.c
     ${CMAKE_CURRENT_LIST_DIR}/midi_service_stream_handler.c
 )
