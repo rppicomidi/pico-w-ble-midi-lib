@@ -149,8 +149,7 @@ static int midi_service_write_callback(hci_con_handle_t con_handle, uint16_t att
 void midi_service_server_init(btstack_packet_handler_t packet_handler){
 
     static const uint8_t midi_profile_uuid128[] = { 0x03, 0xB8, 0x0E, 0x5A, 0xED, 0xE8, 0x4B, 0x33, 0xA7, 0x51, 0x6C, 0xE3, 0x4E, 0xC4, 0xC7, 0x00 };
-    static const uint8_t midi_rx_uuid128[] = { 0x77, 0x72, 0xE5, 0xDB, 0x38, 0x68, 0x41, 0x12, 0xA1, 0xA9, 0xF2, 0x66, 0x9D, 0x10, 0x6B, 0xF3 };
-    static const uint8_t midi_tx_uuid128[] = { 0x77, 0x72, 0xE5, 0xDB, 0x38, 0x68, 0x41, 0x12, 0xA1, 0xA9, 0xF2, 0x66, 0x9D, 0x10, 0x6B, 0xF3 };
+    static const uint8_t midi_characteristic_uuid128[] = { 0x77, 0x72, 0xE5, 0xDB, 0x38, 0x68, 0x41, 0x12, 0xA1, 0xA9, 0xF2, 0x66, 0x9D, 0x10, 0x6B, 0xF3 };
 
     client_packet_handler = packet_handler;
 
@@ -162,9 +161,9 @@ void midi_service_server_init(btstack_packet_handler_t packet_handler){
 	UNUSED(service_found);
 
 	// get characteristic value handle and client configuration handle
-	midi_rx_value_handle = gatt_server_get_value_handle_for_characteristic_with_uuid128(start_handle, end_handle, midi_rx_uuid128);
-	midi_tx_value_handle = gatt_server_get_value_handle_for_characteristic_with_uuid128(start_handle, end_handle, midi_tx_uuid128);
-	midi_tx_client_configuration_handle = gatt_server_get_client_configuration_handle_for_characteristic_with_uuid128(start_handle, end_handle, midi_tx_uuid128);
+	midi_rx_value_handle = gatt_server_get_value_handle_for_characteristic_with_uuid128(start_handle, end_handle, midi_characteristic_uuid128);
+	midi_tx_value_handle = gatt_server_get_value_handle_for_characteristic_with_uuid128(start_handle, end_handle, midi_characteristic_uuid128);
+	midi_tx_client_configuration_handle = gatt_server_get_client_configuration_handle_for_characteristic_with_uuid128(start_handle, end_handle, midi_characteristic_uuid128);
 
 	log_info("midi_rx_value_handle 					0x%02x", midi_rx_value_handle);
 	log_info("midi_tx_value_handle 					0x%02x", midi_tx_value_handle);
