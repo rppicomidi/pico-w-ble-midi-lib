@@ -87,7 +87,8 @@ extern "C" {
  * 
  * @param packet_handler 
  */
-void ble_midi_client_init(btstack_packet_handler_t packet_handler);
+void ble_midi_client_init(btstack_packet_handler_t packet_handler, const char* profile_name, uint8_t profile_name_len);
+void ble_midi_client_deinit();
 
 void ble_midi_client_scan_begin();
 void ble_midi_client_scan_end();

@@ -51,7 +51,7 @@ static gatt_client_notification_t notification_listener;
 static bool listener_registered = 0;
 static ble_midi_codec_data_t* ble_midi_pkt_codec_data;
 static btstack_context_callback_registration_t write_callback_registration;
-
+static uint8_t *client_profile_data = NULL;
 static void printUUID(uint8_t * uuid128, uint16_t uuid16){
     if (uuid16){
         printf("%04x",uuid16);
@@ -80,37 +80,6 @@ static int find_midi_peripheral(BLEMC_client_t* blemc, uint8_t* bdaddr)
     }
     return idx;
 }
-
-#if 0
-static bool add_advertised_midi_peripheral(BLEMC_client_t* blemc, char* name, uint8_t* bdaddr, uint8_t type)
-{
-    if (state != BLEMC_WAIT_FOR_SCAN_COMPLETE) {
-        return false; // wrong state for receiving a scan result;
-    }
-    if (blemc->n_midi_peripherals >= BLEMC_MAX_SCAN_ITEMS) {
-        return false; // list full
-    }
-    uint8_t idx;
-    for (idx = 0; idx < blemc->n_midi_peripherals; idx++) {
-        if (memcmp(blemc->midi_peripherals[idx].bdaddr, bdaddr, sizeof(blemc->midi_peripherals[idx].bdaddr) == 0)) {
-            // found; update the name string and the timeout field.
-            strncpy(blemc->midi_peripherals[idx].name, name, sizeof(blemc->midi_peripherals[idx].name) - 1);
-            blemc->midi_peripherals[idx].name[sizeof(blemc->midi_peripherals[idx].name) - 1] = '\0';
-            blemc->midi_peripherals[idx].timeout = scan_remove_timeout;
-        }
-    }
-    if (idx == blemc->n_midi_peripherals) {
-        // the bdaddr was not found. add to the end of the list
-        Advertised_MIDI_Peripheral_t* new_item =  blemc->midi_peripherals + blemc->n_midi_peripherals;
-        strncpy(new_item->name, name, sizeof(new_item->name) -1);
-        new_item->name[sizeof(new_item->name) -1] = '\0';
-        memcpy(new_item->bdaddr, bdaddr, sizeof(new_item->bdaddr));
-        new_item->type = type;
-        new_item->timeout = scan_remove_timeout;
-        blemc->n_midi_peripherals++;
-    }
-}
-#endif
 
 static void scan_timer_cb(btstack_timer_source_t* timer_)
 {
@@ -464,7 +433,7 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
     }
 }
 
-#if 0
+#if 1
 static void exit_client_mode()
 {
     hci_power_control(HCI_POWER_OFF);
@@ -473,8 +442,13 @@ static void exit_client_mode()
     ble_midi_client_scan_end();
 
     sm_deinit();
+    btstack_crypto_deinit();
     l2cap_deinit();
     cyw43_arch_deinit();
+    if (client_profile_data != NULL) {
+        free(client_profile_data);
+        client_profile_data = NULL;
+    }
     state = BLEMC_DEINIT;
 }
 #endif
@@ -505,6 +479,8 @@ static void enter_client_mode()
     sm_add_event_handler(&sm_event_callback_registration);
     // Initialize L2CAP and register HCI event handler
     l2cap_init();
+    // set up attribute server in case the device queries the client's name
+    att_server_init(client_profile_data, NULL, NULL); 
     // Set up security manager
     sm_init();
         // Initialize GATT client 
@@ -517,12 +493,44 @@ static void enter_client_mode()
     gap_set_connection_parameters(96, 48, 6, 12, 4, 1000, 0x01, 6 * 2);
 }
 
-void ble_midi_client_init(btstack_packet_handler_t packet_handler)
+void ble_midi_client_init(btstack_packet_handler_t packet_handler, const char* profile_name, uint8_t profile_name_len)
 {
     client_application_packet_handler = packet_handler;
     ble_midi_pkt_codec_data = ble_midi_pkt_codec_get_data_by_index(0);
     ble_midi_pkt_codec_init_data(ble_midi_pkt_codec_data, MAX_BLE_MIDI_PACKET);
-    enter_client_mode();
+    const uint8_t base_profile_data[] =
+    {
+        // ATT DB Version
+        1,
+
+        // 0x0001 PRIMARY_SERVICE-GAP_SERVICE
+        0x0a, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x28, 0x00, 0x18, 
+        // 0x0002 CHARACTERISTIC-GAP_DEVICE_NAME - READ
+        0x0d, 0x00, 0x02, 0x00, 0x02, 0x00, 0x03, 0x28, 0x02, 0x03, 0x00, 0x00, 0x2a, 
+        // 0x0003 VALUE CHARACTERISTIC-GAP_DEVICE_NAME - READ -'Pico W MIDI USB BLE Hub'
+        // READ_ANYBODY
+        0x08, 0x00, 0x02, 0x00, 0x03, 0x00, 0x00, 0x2a,
+        // the profile name goes here
+        // ...
+        // need two 0 bytes to terminate
+    };
+    // 34 is 1 version byte+10 primary service-gap service bytes+
+    // 13 value characteristic-gap device name bytes+
+    // 8 characteristic value header bytes + 2 zero termination bytes
+    client_profile_data = malloc(34+profile_name_len);
+    if (client_profile_data != NULL) {
+        memcpy(client_profile_data, base_profile_data, sizeof(base_profile_data));
+        memcpy(client_profile_data+32, profile_name, profile_name_len);
+        client_profile_data[24] = 8+profile_name_len;
+        client_profile_data[32+profile_name_len] = 0;
+        client_profile_data[33+profile_name_len] = 0;
+        enter_client_mode();
+    }
+}
+
+void ble_midi_client_deinit()
+{
+    exit_client_mode();
 }
 
 void ble_midi_client_scan_begin()
