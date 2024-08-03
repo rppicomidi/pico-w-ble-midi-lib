@@ -334,8 +334,10 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
             }
             if (state == BLEMC_WAIT_FOR_CONNECTION) // then disconnected from previous to connect to next
                 gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
-            else
+            else {
                 state = BLEMC_IDLE;
+                midi_client.n_midi_peripherals = 0;
+            }
             midi_service_emit_state(con_handle, false); // pass the connection handle to the client application to this library
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
 
@@ -642,6 +644,13 @@ static void handle_can_write_without_response(void * context)
     ble_midi_packet_t pkt;
     if (ble_midi_pkt_codec_ble_pkt_pop(&pkt, ble_midi_pkt_codec_data))
         gatt_client_write_value_of_characteristic_without_response(con_handle, midi_data_io_characteristic.value_handle, pkt.nbytes, pkt.pkt);
+    // ready next packet to send if there is one buffered
+    if (ble_midi_pkt_codec_ble_pkt_available(ble_midi_pkt_codec_data)) {
+        write_callback_registration.callback = handle_can_write_without_response;
+        write_callback_registration.context = NULL;
+
+        gatt_client_request_to_write_without_response(&write_callback_registration, con_handle);
+    }
 }
 
 
@@ -651,13 +660,14 @@ uint8_t ble_midi_client_stream_write(hci_con_handle_t con_handle_, uint8_t nbyte
     if (con_handle_ == con_handle) {
         bool ready_to_send = false;
         bytes_written = ble_midi_pkt_codec_push_midi(midi_stream_bytes, nbytes, ble_midi_pkt_codec_data, &ready_to_send);
-        if (nbytes == bytes_written) {
+        if (bytes_written > 0) {
             if (ready_to_send) {
                 write_callback_registration.callback = handle_can_write_without_response;
                 write_callback_registration.context = NULL;
 
                 gatt_client_request_to_write_without_response(&write_callback_registration, con_handle);
             }
+
         }
     }
     return bytes_written;
