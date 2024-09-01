@@ -163,6 +163,8 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
                 state = BLEMC_WAIT_FOR_MIDI_DATA_RX;
                 printf("ready to receive MIDI data\r\n");
                 cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
+                hci_connection_t * con = hci_connection_for_handle(con_handle);
+                printf("HCI Connection: bdaddr=%s type=%u", bd_addr_to_str(con->address), con->address_type);
             }
             break;
         case GATT_EVENT_NOTIFICATION:
@@ -356,6 +358,7 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
 
     bd_addr_t addr;
     bd_addr_type_t addr_type;
+    uint16_t idx;
 
     switch (hci_event_packet_get_type(packet)) {
         case SM_EVENT_IDENTITY_RESOLVING_STARTED:
@@ -405,6 +408,12 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
             sm_event_reencryption_complete_get_address(packet, addr);
             printf("Bonding information exists for addr type %u, identity addr %s -> start re-encryption\n",
                    sm_event_reencryption_started_get_addr_type(packet), bd_addr_to_str(addr));
+            break;
+        case SM_EVENT_IDENTITY_CREATED:
+            idx = sm_event_identity_created_get_index(packet);
+            addr_type = sm_event_identity_created_get_addr_type(packet);
+            sm_event_identity_created_get_address(packet, addr);
+            printf("new bonded idx=%d, addr=%s type=%u\r\n", idx, bd_addr_to_str(addr), addr_type);
             break;
         case SM_EVENT_REENCRYPTION_COMPLETE:
             switch (sm_event_reencryption_complete_get_status(packet)){
@@ -570,22 +579,29 @@ void ble_midi_client_dump_midi_peripherals()
 {
     printf("Index Bluetooth Address Name\r\n");
     for (uint8_t idx=0; idx < midi_client.n_midi_peripherals; idx++) {
-        printf("%-5u %s %s\r\n", idx+1, bd_addr_to_str(midi_client.midi_peripherals[idx].bdaddr), midi_client.midi_peripherals[idx].name );
+        printf("%-5u %s %s %u\r\n", idx+1, bd_addr_to_str(midi_client.midi_peripherals[idx].bdaddr), midi_client.midi_peripherals[idx].name, midi_client.midi_peripherals[idx].addr_type );
     }
 }
 
 bool ble_midi_client_request_connect(uint8_t idx)
 {
-    if (idx == 0) {
-        // TODO: retrieve the last connected device and connect
-        // if it exists. For now, just return false
-        return false;
-    }
     if (idx > midi_client.n_midi_peripherals)
         return false;
-    idx -= 1;
-    next_connect_bd_addr_type = midi_client.midi_peripherals[idx].addr_type;
-    memcpy(next_connect_bd_addr, midi_client.midi_peripherals[idx].bdaddr, sizeof(next_connect_bd_addr));
+    if (idx == 0) {
+        // TODO: for now use stored TLV info at index 15 as last connected
+        bd_addr_t entry_address;
+        int entry_address_type = (int) BD_ADDR_TYPE_UNKNOWN;
+        le_device_db_info(15, &entry_address_type, entry_address, NULL);
+        if (entry_address_type <= (int)BD_ADDR_TYPE_LE_RANDOM_IDENTITY) {
+            next_connect_bd_addr_type = entry_address_type;
+            memcpy(next_connect_bd_addr, entry_address, sizeof(next_connect_bd_addr));
+        }
+    }
+    else {
+        idx -= 1;
+        next_connect_bd_addr_type = midi_client.midi_peripherals[idx].addr_type;
+        memcpy(next_connect_bd_addr, midi_client.midi_peripherals[idx].bdaddr, sizeof(next_connect_bd_addr));
+    }
     switch(state) {
         case BLEMC_DEINIT:
             enter_client_mode();

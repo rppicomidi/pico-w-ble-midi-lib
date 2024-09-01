@@ -33,6 +33,7 @@
  */
 void midi_service_stream_init(btstack_packet_handler_t packet_handler);
 
+void midi_service_stream_deinit();
 /**
  * @brief write a MIDI 1.0 byte stream nbytes long
  *
