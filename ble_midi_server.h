@@ -51,7 +51,7 @@ void ble_midi_server_init(const uint8_t* profile_data, const uint8_t* resp_data,
 /**
  * @brief disconnect if needed. stop advertising if needed.
  *
- * de-initialize the BT stack and hardware.
+ * de-initialize the BT stack and hardware in preparation to switch to client mode
  */
 void ble_midi_server_deinit();
 

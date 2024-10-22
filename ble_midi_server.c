@@ -203,14 +203,6 @@ void ble_midi_server_init(const uint8_t* profile_data, const uint8_t* resp_data,
     }
 
     con_handle = HCI_CON_HANDLE_INVALID;
-    printf("con_handle initialized\r\n");
-    // initialize CYW43 driver architecture (will enable BT if/because CYW43_ENABLE_BLUETOOTH == 1)
-#if 0
-    if (cyw43_arch_init()) {
-        printf("ble server: failed to initialize cyw43_arch\n");
-        return;
-    }
-#endif
     l2cap_init();
 
     sm_init();
@@ -241,7 +233,6 @@ void ble_midi_server_deinit()
     sm_deinit();
     btstack_crypto_deinit();
     l2cap_deinit();
-    //cyw43_arch_deinit();
     initialized = false;
 }
 

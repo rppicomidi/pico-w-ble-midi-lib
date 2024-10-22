@@ -45,7 +45,6 @@ static uint16_t conn_interval;
 static uint8_t next_connect_bd_addr_type;
 static uint8_t next_connect_bd_addr[6];
 static gatt_client_service_t midi_service;
-//static btstack_packet_handler_t client_application_packet_handler;
 static gatt_client_characteristic_t midi_data_io_characteristic;
 static gatt_client_notification_t notification_listener;
 static bool listener_registered = 0;
@@ -221,7 +220,7 @@ static bool get_local_name_from_ad_data(uint8_t ad_len, const uint8_t* ad_data, 
 
 static void midi_service_emit_state(hci_con_handle_t con_handle, bool enabled)
 {
-    // TODO
+    // TODO Right now, all BT Stack messages are handled in this module
     (void)con_handle;
     (void)enabled;
 #if 0
@@ -450,7 +449,6 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
     }
 }
 
-#if 1
 static void exit_client_mode()
 {
     if (ble_midi_client_is_connected())
@@ -463,7 +461,6 @@ static void exit_client_mode()
     sm_deinit();
     btstack_crypto_deinit();
     l2cap_deinit();
-    //cyw43_arch_deinit();
     if (client_profile_data != NULL) {
         free(client_profile_data);
         client_profile_data = NULL;
@@ -471,7 +468,6 @@ static void exit_client_mode()
     state = BLEMC_DEINIT;
     con_handle = HCI_CON_HANDLE_INVALID;
 }
-#endif
 
 static void enter_client_mode()
 {
@@ -486,12 +482,7 @@ static void enter_client_mode()
         }
         return;
     }
-#if 0
-    else if (cyw43_arch_init() != 0) {
-        printf("error initializing CYW43_ARCH\r\n");
-        return;
-    }
-#endif
+
     hci_event_callback_registration.callback = &handle_hci_event;
     hci_add_event_handler(&hci_event_callback_registration);
 
