@@ -83,18 +83,53 @@ extern "C" {
 /* API_START */
 
 /**
- * @brief 
+ * @brief Initialize the BLE-MIDI client
  * 
- * @param packet_handler 
+ * @param profile_name the name of the profile to advertise
+ * @param profile_name_len the number of characters in the profile name
  */
-void ble_midi_client_init(btstack_packet_handler_t packet_handler, const char* profile_name, uint8_t profile_name_len);
+void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len);
+
+/**
+ * @brief de-initialize the BLE-MIDI client in preparation to switching to server mode
+ *
+ */
 void ble_midi_client_deinit();
 
+/**
+ * @brief Switch to client mode if necessary, and start a BLE scan for BLE-MIDI servers
+ *
+ */
 void ble_midi_client_scan_begin();
+
+/**
+ * @brief End a BLE scan for BLE-MIDI servers
+ *
+ */
 void ble_midi_client_scan_end();
+
+/**
+ * @brief print (to the console) a list of all devices discovered in the scan
+ *
+ */
 void ble_midi_client_dump_midi_peripherals();
+
+/**
+ * @brief request connection to a device discovered during the scan
+ *
+ * @param idx the index number of the device as displayed by ble_midi_client_dump_midi_peripherals()
+ * @return true if the connection request is successful
+ * @return false if the device was never discovered or the connection request failed immediately.
+ */
 bool ble_midi_client_request_connect(uint8_t idx);
-void ble_midi_client_request_disconnect(hci_con_handle_t handle);
+
+/**
+ * @brief If already connected, disconnect from the connected server.
+ *
+ * This function returns before the disconnection is complete.
+ */
+void ble_midi_client_request_disconnect();
+
 /**
  * @brief write a MIDI 1.0 byte stream nbytes long
  *
@@ -107,7 +142,7 @@ void ble_midi_client_request_disconnect(hci_con_handle_t handle);
  * @param midi_stream_bytes a pointer to the MIDI 1.0 byte stream storage
  * @return uint8_t the number of bytes successfully written
  */
-uint8_t ble_midi_client_stream_write(hci_con_handle_t con_handle, uint8_t nbytes, const uint8_t* midi_stream_bytes);
+uint8_t ble_midi_client_stream_write(uint8_t nbytes, const uint8_t* midi_stream_bytes);
 
 /**
  * @brief read a MIDI 1.0 byte stream for a single timestamp up to max_bytes long
@@ -126,7 +161,13 @@ uint8_t ble_midi_client_stream_write(hci_con_handle_t con_handle, uint8_t nbytes
  * @return uint8_t the number of bytes read for the timestamped byte stream or
  * zero if there are no more bytes to read
  */
-uint8_t ble_midi_client_stream_read(hci_con_handle_t con_handle, uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp);
+uint8_t ble_midi_client_stream_read(uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp);
+
+/**
+ * @brief
+ *
+ * @return true if the client is connected to a server, false otherwise
+ */
 bool ble_midi_client_is_connected(void);
 #if defined __cplusplus
 }

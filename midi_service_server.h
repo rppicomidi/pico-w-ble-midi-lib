@@ -48,6 +48,8 @@ extern "C" {
  */
 void midi_service_server_init(btstack_packet_handler_t packet_handler);
 
+void midi_service_server_deinit();
+
 /** 
  * @brief Queue send request. When called, one packet can be sent via ble_midi_service_send below
  * @param request

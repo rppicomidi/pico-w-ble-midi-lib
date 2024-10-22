@@ -45,7 +45,7 @@ static uint16_t conn_interval;
 static uint8_t next_connect_bd_addr_type;
 static uint8_t next_connect_bd_addr[6];
 static gatt_client_service_t midi_service;
-static btstack_packet_handler_t client_application_packet_handler;
+//static btstack_packet_handler_t client_application_packet_handler;
 static gatt_client_characteristic_t midi_data_io_characteristic;
 static gatt_client_notification_t notification_listener;
 static bool listener_registered = 0;
@@ -219,7 +219,12 @@ static bool get_local_name_from_ad_data(uint8_t ad_len, const uint8_t* ad_data, 
     return success;
 }
 
-static void midi_service_emit_state(hci_con_handle_t con_handle, bool enabled){
+static void midi_service_emit_state(hci_con_handle_t con_handle, bool enabled)
+{
+    // TODO
+    (void)con_handle;
+    (void)enabled;
+#if 0
     uint8_t event[5];
     uint8_t pos = 0;
     event[pos++] = HCI_EVENT_GATTSERVICE_META;
@@ -228,6 +233,7 @@ static void midi_service_emit_state(hci_con_handle_t con_handle, bool enabled){
     little_endian_store_16(event,pos, (uint16_t) con_handle);
     pos += 2;
     (*client_application_packet_handler)(HCI_EVENT_PACKET, 0, event, pos);
+#endif
 }
 
 static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
@@ -447,6 +453,8 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
 #if 1
 static void exit_client_mode()
 {
+    if (ble_midi_client_is_connected())
+        ble_midi_client_request_disconnect();
     hci_power_control(HCI_POWER_OFF);
     hci_remove_event_handler(&hci_event_callback_registration);
     sm_remove_event_handler(&sm_event_callback_registration);
@@ -455,12 +463,13 @@ static void exit_client_mode()
     sm_deinit();
     btstack_crypto_deinit();
     l2cap_deinit();
-    cyw43_arch_deinit();
+    //cyw43_arch_deinit();
     if (client_profile_data != NULL) {
         free(client_profile_data);
         client_profile_data = NULL;
     }
     state = BLEMC_DEINIT;
+    con_handle = HCI_CON_HANDLE_INVALID;
 }
 #endif
 
@@ -477,11 +486,12 @@ static void enter_client_mode()
         }
         return;
     }
+#if 0
     else if (cyw43_arch_init() != 0) {
         printf("error initializing CYW43_ARCH\r\n");
         return;
     }
-
+#endif
     hci_event_callback_registration.callback = &handle_hci_event;
     hci_add_event_handler(&hci_event_callback_registration);
 
@@ -504,9 +514,9 @@ static void enter_client_mode()
     gap_set_connection_parameters(96, 48, 6, 12, 4, 1000, 0x01, 6 * 2);
 }
 
-void ble_midi_client_init(btstack_packet_handler_t packet_handler, const char* profile_name, uint8_t profile_name_len)
+void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len)
 {
-    client_application_packet_handler = packet_handler;
+    //client_application_packet_handler = packet_handler;
     ble_midi_pkt_codec_data = ble_midi_pkt_codec_get_data_by_index(0);
     ble_midi_pkt_codec_init_data(ble_midi_pkt_codec_data, MAX_BLE_MIDI_PACKET);
     const uint8_t base_profile_data[] =
@@ -518,7 +528,7 @@ void ble_midi_client_init(btstack_packet_handler_t packet_handler, const char* p
         0x0a, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x28, 0x00, 0x18, 
         // 0x0002 CHARACTERISTIC-GAP_DEVICE_NAME - READ
         0x0d, 0x00, 0x02, 0x00, 0x02, 0x00, 0x03, 0x28, 0x02, 0x03, 0x00, 0x00, 0x2a, 
-        // 0x0003 VALUE CHARACTERISTIC-GAP_DEVICE_NAME - READ -'Pico W MIDI USB BLE Hub'
+        // 0x0003 VALUE CHARACTERISTIC-GAP_DEVICE_NAME - READ -
         // READ_ANYBODY
         0x08, 0x00, 0x02, 0x00, 0x03, 0x00, 0x00, 0x2a,
         // the profile name goes here
@@ -529,6 +539,8 @@ void ble_midi_client_init(btstack_packet_handler_t packet_handler, const char* p
     // 13 value characteristic-gap device name bytes+
     // 8 characteristic value header bytes + 2 zero termination bytes
     client_profile_data = malloc(34+profile_name_len);
+    con_handle = HCI_CON_HANDLE_INVALID;
+
     if (client_profile_data != NULL) {
         memcpy(client_profile_data, base_profile_data, sizeof(base_profile_data));
         memcpy(client_profile_data+32, profile_name, profile_name_len);
@@ -646,9 +658,9 @@ bool ble_midi_client_request_connect(uint8_t idx)
     return true;
 }
 
-void ble_midi_client_request_disconnect(hci_con_handle_t handle)
+void ble_midi_client_request_disconnect()
 {
-    if (state > BLEMC_WAIT_FOR_SCAN_COMPLETE && handle == con_handle) {
+    if (state > BLEMC_WAIT_FOR_SCAN_COMPLETE && ble_midi_client_is_connected()) {
         state = BLEMC_WAIT_FOR_DISCONNECTION;
         gap_disconnect(con_handle);
     }
@@ -670,38 +682,34 @@ static void handle_can_write_without_response(void * context)
 }
 
 
-uint8_t ble_midi_client_stream_write(hci_con_handle_t con_handle_, uint8_t nbytes, const uint8_t* midi_stream_bytes)
+uint8_t ble_midi_client_stream_write(uint8_t nbytes, const uint8_t* midi_stream_bytes)
 {
     uint8_t bytes_written = 0;
-    if (con_handle_ == con_handle) {
-        bool ready_to_send = false;
-        bytes_written = ble_midi_pkt_codec_push_midi(midi_stream_bytes, nbytes, ble_midi_pkt_codec_data, &ready_to_send);
-        if (bytes_written > 0) {
-            if (ready_to_send) {
-                write_callback_registration.callback = handle_can_write_without_response;
-                write_callback_registration.context = NULL;
+    bool ready_to_send = false;
+    bytes_written = ble_midi_pkt_codec_push_midi(midi_stream_bytes, nbytes, ble_midi_pkt_codec_data, &ready_to_send);
+    if (bytes_written > 0) {
+        if (ready_to_send) {
+            write_callback_registration.callback = handle_can_write_without_response;
+            write_callback_registration.context = NULL;
 
-                gatt_client_request_to_write_without_response(&write_callback_registration, con_handle);
-            }
-
+            gatt_client_request_to_write_without_response(&write_callback_registration, con_handle);
         }
+
     }
     return bytes_written;
 }
 
-uint8_t ble_midi_client_stream_read(hci_con_handle_t con_handle_, uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp)
+uint8_t ble_midi_client_stream_read(uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp)
 {
     ble_midi_message_t mes;
     uint8_t nread = 0;
-    if (con_handle_ == con_handle) {
-        uint8_t nbytes = ble_midi_pkt_codec_pop_midi(&mes, ble_midi_pkt_codec_data);
-        if (nbytes == sizeof(mes)) {
-            uint8_t bytecount = mes.nbytes & ble_midi_packet_nbytes_mask;
-            if (bytecount <= max_bytes) {
-                *timestamp = mes.timestamp_ms;
-                memcpy(midi_stream_bytes, mes.msg_bytes, bytecount);
-                nread = bytecount;
-            }
+    uint8_t nbytes = ble_midi_pkt_codec_pop_midi(&mes, ble_midi_pkt_codec_data);
+    if (nbytes == sizeof(mes)) {
+        uint8_t bytecount = mes.nbytes & ble_midi_packet_nbytes_mask;
+        if (bytecount <= max_bytes) {
+            *timestamp = mes.timestamp_ms;
+            memcpy(midi_stream_bytes, mes.msg_bytes, bytecount);
+            nread = bytecount;
         }
     }
 

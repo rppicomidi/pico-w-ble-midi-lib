@@ -177,6 +177,11 @@ void midi_service_server_init(btstack_packet_handler_t packet_handler){
 	att_server_register_service_handler(&midi_service);
 }
 
+void midi_service_server_deinit()
+{
+    // TODO
+}
+
 bool midi_service_server_request_can_send_now(btstack_context_callback_registration_t* request, hci_con_handle_t con_handle){
 	return att_server_request_to_send_notification(request, con_handle) == ERROR_CODE_SUCCESS;
 }
