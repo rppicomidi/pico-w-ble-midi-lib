@@ -141,6 +141,3 @@ The library provides `printf` type console library output and
 is best suited for a command line interpreter-based application.
 The client also advertises the GAP_DEVICE_NAME charateristic.
 
-## TODO
-Right now, the security model is "hard-wired" into the client
-and server libraries. That should be configurable during initialization.

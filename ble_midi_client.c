@@ -497,12 +497,10 @@ static void enter_client_mode()
     att_server_init(client_profile_data, NULL, NULL); 
     // Set up security manager
     sm_init();
-        // Initialize GATT client 
+    // Initialize GATT client
     gatt_client_init();
     // register for HCI events
-    //sm_set_io_capabilities(IO_CAPABILITY_DISPLAY_ONLY);
     sm_set_io_capabilities(iocaps);
-    //sm_set_authentication_requirements(SM_AUTHREQ_SECURE_CONNECTION | SM_AUTHREQ_MITM_PROTECTION | SM_AUTHREQ_BONDING);
     sm_set_authentication_requirements(secmask);
 
     // use MIDI connection parameters: connection scan interval 60ms, connection scan window 30ms, connectionconn interval min/max (* 1.25 ms), slave latency, supervision timeout, CE len min/max (* 0.6125 ms) 
