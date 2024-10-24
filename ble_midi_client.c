@@ -51,6 +51,8 @@ static bool listener_registered = 0;
 static ble_midi_codec_data_t* ble_midi_pkt_codec_data;
 static btstack_context_callback_registration_t write_callback_registration;
 static uint8_t *client_profile_data = NULL;
+static io_capability_t iocaps;
+static uint8_t secmask;
 static void printUUID(uint8_t * uuid128, uint16_t uuid16){
     if (uuid16){
         printf("%04x",uuid16);
@@ -498,14 +500,16 @@ static void enter_client_mode()
         // Initialize GATT client 
     gatt_client_init();
     // register for HCI events
-    sm_set_io_capabilities(IO_CAPABILITY_DISPLAY_ONLY);
-    sm_set_authentication_requirements(SM_AUTHREQ_SECURE_CONNECTION | SM_AUTHREQ_MITM_PROTECTION | SM_AUTHREQ_BONDING);
+    //sm_set_io_capabilities(IO_CAPABILITY_DISPLAY_ONLY);
+    sm_set_io_capabilities(iocaps);
+    //sm_set_authentication_requirements(SM_AUTHREQ_SECURE_CONNECTION | SM_AUTHREQ_MITM_PROTECTION | SM_AUTHREQ_BONDING);
+    sm_set_authentication_requirements(secmask);
 
     // use MIDI connection parameters: connection scan interval 60ms, connection scan window 30ms, connectionconn interval min/max (* 1.25 ms), slave latency, supervision timeout, CE len min/max (* 0.6125 ms) 
     gap_set_connection_parameters(96, 48, 6, 12, 4, 1000, 0x01, 6 * 2);
 }
 
-void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len)
+void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len, io_capability_t iocaps_, uint8_t secmask_)
 {
     //client_application_packet_handler = packet_handler;
     ble_midi_pkt_codec_data = ble_midi_pkt_codec_get_data_by_index(0);
@@ -538,6 +542,8 @@ void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len)
         client_profile_data[24] = 8+profile_name_len;
         client_profile_data[32+profile_name_len] = 0;
         client_profile_data[33+profile_name_len] = 0;
+        iocaps = iocaps_;
+        secmask = secmask_;
         enter_client_mode();
     }
 }

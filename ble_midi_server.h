@@ -46,7 +46,7 @@ extern "C" {
  * @param resp_data is the data to send in response to active scanning
  * @param resp_data_len is the number of bytes in the resp_data buffer
  */
-void ble_midi_server_init(const uint8_t* profile_data, const uint8_t* resp_data, const uint8_t resp_data_len);
+void ble_midi_server_init(const uint8_t* profile_data, const uint8_t* resp_data, uint8_t resp_data_len, io_capability_t iocaps, uint8_t secmask);
 
 /**
  * @brief disconnect if needed. stop advertising if needed.

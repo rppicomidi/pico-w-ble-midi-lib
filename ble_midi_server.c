@@ -193,7 +193,7 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
 }
 
 // TODO initialize scan response data and data length
-void ble_midi_server_init(const uint8_t* profile_data, const uint8_t* resp_data, const uint8_t resp_data_len)
+void ble_midi_server_init(const uint8_t* profile_data, const uint8_t* resp_data, const uint8_t resp_data_len, io_capability_t iocaps, uint8_t secmask)
 {
     scan_resp_data_len = resp_data_len;
     memcpy(scan_resp_data, resp_data, resp_data_len);
@@ -208,8 +208,8 @@ void ble_midi_server_init(const uint8_t* profile_data, const uint8_t* resp_data,
     sm_init();
 
     // just works, legacy pairing, with bonding
-    sm_set_io_capabilities(IO_CAPABILITY_NO_INPUT_NO_OUTPUT);
-    sm_set_authentication_requirements(SM_AUTHREQ_SECURE_CONNECTION | SM_AUTHREQ_BONDING);
+    sm_set_io_capabilities(iocaps);
+    sm_set_authentication_requirements(secmask);
     // register for SM events
     sm_event_callback_registration.callback = &packet_handler;
     sm_add_event_handler(&sm_event_callback_registration);

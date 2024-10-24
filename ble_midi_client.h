@@ -88,7 +88,7 @@ extern "C" {
  * @param profile_name the name of the profile to advertise
  * @param profile_name_len the number of characters in the profile name
  */
-void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len);
+void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len, io_capability_t iocaps, uint8_t secmask);
 
 /**
  * @brief de-initialize the BLE-MIDI client in preparation to switching to server mode
