@@ -169,6 +169,14 @@ uint8_t ble_midi_client_stream_read(uint8_t max_bytes, uint8_t* midi_stream_byte
  * @return true if the client is connected to a server, false otherwise
  */
 bool ble_midi_client_is_connected(void);
+
+/**
+ * @brief
+ *
+ * @return true if the client is connected to a server and the
+ * client is ready to send and receive MIDI data
+ */
+bool ble_midi_client_is_ready(void);
 #if defined __cplusplus
 }
 #endif

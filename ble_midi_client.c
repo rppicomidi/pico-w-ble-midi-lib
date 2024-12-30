@@ -53,6 +53,7 @@ static btstack_context_callback_registration_t write_callback_registration;
 static uint8_t *client_profile_data = NULL;
 static io_capability_t iocaps;
 static uint8_t secmask;
+static bool midi_is_ready = false;
 static void printUUID(uint8_t * uuid128, uint16_t uuid16){
     if (uuid16){
         printf("%04x",uuid16);
@@ -166,6 +167,7 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
                 cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
                 hci_connection_t * con = hci_connection_for_handle(con_handle);
                 printf("HCI Connection: bdaddr=%s type=%u", bd_addr_to_str(con->address), con->address_type);
+                midi_is_ready = true;
             }
             break;
         case GATT_EVENT_NOTIFICATION:
@@ -349,7 +351,7 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
             }
             midi_service_emit_state(con_handle, false); // pass the connection handle to the client application to this library
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
-
+            con_handle = HCI_CON_HANDLE_INVALID;
             break;
 
         default:
@@ -469,6 +471,7 @@ static void exit_client_mode()
     }
     state = BLEMC_DEINIT;
     con_handle = HCI_CON_HANDLE_INVALID;
+    midi_is_ready = false;
 }
 
 static void enter_client_mode()
@@ -533,6 +536,7 @@ void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len, io
     // 8 characteristic value header bytes + 2 zero termination bytes
     client_profile_data = malloc(34+profile_name_len);
     con_handle = HCI_CON_HANDLE_INVALID;
+    midi_is_ready = false;
 
     if (client_profile_data != NULL) {
         memcpy(client_profile_data, base_profile_data, sizeof(base_profile_data));
@@ -714,4 +718,9 @@ uint8_t ble_midi_client_stream_read(uint8_t max_bytes, uint8_t* midi_stream_byte
 bool ble_midi_client_is_connected(void)
 {
     return con_handle != HCI_CON_HANDLE_INVALID;
+}
+
+bool ble_midi_client_is_ready(void)
+{
+    return midi_is_ready;
 }
