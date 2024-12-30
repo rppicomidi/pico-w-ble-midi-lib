@@ -617,7 +617,7 @@ bool ble_midi_client_request_connect(uint8_t idx)
         case BLEMC_DEINIT:
             enter_client_mode();
             state = BLEMC_WAIT_FOR_CONNECTION;
-            gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
+            //when power on completes, will request connection
             hci_power_control(HCI_POWER_ON);
             break;
         case BLEMC_IDLE:
