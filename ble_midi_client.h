@@ -97,6 +97,22 @@ void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len, io
 void ble_midi_client_deinit();
 
 /**
+ * @brief set the BDADDR and type of the last connected BLE MIDI server
+ *
+ * @param addr_type the BLE address type
+ * @param addr pointer to the 6-byte address
+ */
+void ble_midi_client_set_last_connected(int addr_type, uint8_t* addr);
+
+/**
+ * @brief get the BDADDR and type of the last connected BLE MIDI server
+ *
+ * @param addr a pointer to the 6 byte bdaddr to receive the address
+ * @return the BLE address type or BD_ADDR_TYPE_UNKNOWN if never set
+ */
+int ble_midi_client_get_last_conntected(uint8_t* addr);
+
+/**
  * @brief Switch to client mode if necessary, and start a BLE scan for BLE-MIDI servers
  *
  */

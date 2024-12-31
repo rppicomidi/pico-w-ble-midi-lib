@@ -44,6 +44,8 @@ static hci_con_handle_t con_handle = HCI_CON_HANDLE_INVALID;
 static uint16_t conn_interval;
 static uint8_t next_connect_bd_addr_type;
 static uint8_t next_connect_bd_addr[6];
+static uint8_t last_connected_bd_addr_type = BD_ADDR_TYPE_UNKNOWN;
+static uint8_t last_connected_bd_addr[6];
 static gatt_client_service_t midi_service;
 static gatt_client_characteristic_t midi_data_io_characteristic;
 static gatt_client_notification_t notification_listener;
@@ -166,7 +168,9 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
                 printf("ready to receive MIDI data\r\n");
                 cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
                 hci_connection_t * con = hci_connection_for_handle(con_handle);
-                printf("HCI Connection: bdaddr=%s type=%u", bd_addr_to_str(con->address), con->address_type);
+                //printf("HCI Connection: bdaddr=%s type=%u", bd_addr_to_str(con->address), con->address_type);
+                last_connected_bd_addr_type = con->address_type;
+                memcpy(last_connected_bd_addr, con->address, sizeof(last_connected_bd_addr));
                 midi_is_ready = true;
             }
             break;
@@ -352,6 +356,7 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
             midi_service_emit_state(con_handle, false); // pass the connection handle to the client application to this library
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
             con_handle = HCI_CON_HANDLE_INVALID;
+            midi_is_ready = false;
             break;
 
         default:
@@ -512,7 +517,6 @@ static void enter_client_mode()
 
 void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len, io_capability_t iocaps_, uint8_t secmask_)
 {
-    //client_application_packet_handler = packet_handler;
     ble_midi_pkt_codec_data = ble_midi_pkt_codec_get_data_by_index(0);
     ble_midi_pkt_codec_init_data(ble_midi_pkt_codec_data, MAX_BLE_MIDI_PACKET);
     const uint8_t base_profile_data[] =
@@ -553,6 +557,27 @@ void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len, io
 void ble_midi_client_deinit()
 {
     exit_client_mode();
+}
+
+void ble_midi_client_set_last_connected(int addr_type, uint8_t* addr)
+{
+    if (addr) {
+        last_connected_bd_addr_type = addr_type;
+        memcpy(last_connected_bd_addr, addr, sizeof(last_connected_bd_addr));
+    }
+    else {
+        last_connected_bd_addr_type = BD_ADDR_TYPE_UNKNOWN;
+        memset(last_connected_bd_addr, 0, sizeof(last_connected_bd_addr));
+    }
+}
+
+int ble_midi_client_get_last_conntected(uint8_t* addr)
+{
+    int result = last_connected_bd_addr_type;
+    if (result != BD_ADDR_TYPE_UNKNOWN) {
+        memcpy(addr, last_connected_bd_addr, sizeof(last_connected_bd_addr));
+    }
+    return result;
 }
 
 void ble_midi_client_scan_begin()
@@ -599,6 +624,7 @@ bool ble_midi_client_request_connect(uint8_t idx)
     if (idx > midi_client.n_midi_peripherals)
         return false;
     if (idx == 0) {
+#if 0
         // TODO: for now use stored TLV info at index 15 as last connected
         bd_addr_t entry_address;
         int entry_address_type = (int) BD_ADDR_TYPE_UNKNOWN;
@@ -606,6 +632,11 @@ bool ble_midi_client_request_connect(uint8_t idx)
         if (entry_address_type <= (int)BD_ADDR_TYPE_LE_RANDOM_IDENTITY) {
             next_connect_bd_addr_type = entry_address_type;
             memcpy(next_connect_bd_addr, entry_address, sizeof(next_connect_bd_addr));
+        }
+#endif
+        if (last_connected_bd_addr_type <= (int)BD_ADDR_TYPE_LE_RANDOM_IDENTITY) {
+            next_connect_bd_addr_type = last_connected_bd_addr_type;
+            memcpy(next_connect_bd_addr, last_connected_bd_addr, sizeof(next_connect_bd_addr));
         }
     }
     else {
