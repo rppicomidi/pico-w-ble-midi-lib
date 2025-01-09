@@ -638,6 +638,9 @@ bool ble_midi_client_request_connect(uint8_t idx)
             next_connect_bd_addr_type = last_connected_bd_addr_type;
             memcpy(next_connect_bd_addr, last_connected_bd_addr, sizeof(next_connect_bd_addr));
         }
+        else {
+            return false;
+        }
     }
     else {
         idx -= 1;
