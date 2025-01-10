@@ -117,6 +117,7 @@ static void hci_packet_handler (uint8_t packet_type, uint16_t channel, uint8_t *
     UNUSED(size);
     uint16_t conn_interval;
     hci_con_handle_t con_handle;
+    uint8_t result;
 
     if (packet_type != HCI_EVENT_PACKET) return;
 
@@ -133,7 +134,10 @@ static void hci_packet_handler (uint8_t packet_type, uint16_t channel, uint8_t *
                     // request min con interval 15 ms for iOS per Apple accessory design guidelines, so we have to allow it:
                     // https://developer.apple.com/accessories/Accessory-Design-Guidelines.pdf
                     printf("LE Connection - Request 7.5ms-15ms connection interval\n");
-                    gap_request_connection_parameter_update(con_handle, 6, 12, 0, 0x0048);
+                    result = gap_request_connection_parameter_update(con_handle, 6, 12, 0, 0x0048);
+                    if (result != ERROR_CODE_SUCCESS) {
+                        printf("gap_request_connection_parameter_update failed code=%u\r\n", result);
+                    }
                     break;
                 case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:
                     // print connection parameters (without using float operations)

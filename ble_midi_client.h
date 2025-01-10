@@ -193,6 +193,13 @@ bool ble_midi_client_is_connected(void);
  * client is ready to send and receive MIDI data
  */
 bool ble_midi_client_is_ready(void);
+
+/**
+ * @brief
+ *
+ * @return true if the client is completely de-initialized
+ */
+bool ble_midi_client_is_off(void);
 #if defined __cplusplus
 }
 #endif

@@ -88,6 +88,13 @@ void ble_midi_server_request_disconnect();
  */
 bool ble_midi_server_is_connected();
 
+/**
+ * @brief
+ *
+ * @return true if the Bluetooth server is initialized
+ */
+bool ble_midi_server_is_initialized();
+
 #ifdef __cplusplus
 }
 #endif

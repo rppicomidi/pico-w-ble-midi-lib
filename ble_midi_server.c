@@ -58,6 +58,17 @@ static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packe
             event_type = hci_event_packet_get_type(packet);
             switch(event_type){
                 case BTSTACK_EVENT_STATE:
+                    if (btstack_event_state_get_state(packet) == HCI_STATE_OFF) {
+                        midi_service_stream_deinit();
+                        att_server_deinit();
+                        sm_remove_event_handler(&sm_event_callback_registration);
+
+                        sm_deinit();
+                        btstack_crypto_deinit();
+                        l2cap_deinit();
+                        initialized = false;
+                        break;
+                    }
                     if (btstack_event_state_get_state(packet) != HCI_STATE_WORKING) {
                         return;
                     }
@@ -198,8 +209,7 @@ void ble_midi_server_init(const uint8_t* profile_data, const uint8_t* resp_data,
     scan_resp_data_len = resp_data_len;
     memcpy(scan_resp_data, resp_data, resp_data_len);
     if (initialized) {
-        ble_midi_server_deinit();
-        initialized = false;
+        return; // already in server mode.
     }
 
     con_handle = HCI_CON_HANDLE_INVALID;
@@ -225,7 +235,9 @@ void ble_midi_server_deinit()
 {
     if (!initialized)
         return;
+    // start a process that ends with HCI message BTSTACK_EVENT_STATE with state HCI_STATE_OFF
     hci_power_control(HCI_POWER_OFF);
+#if 0
     midi_service_stream_deinit();
     att_server_deinit();
     sm_remove_event_handler(&sm_event_callback_registration);
@@ -234,6 +246,7 @@ void ble_midi_server_deinit()
     btstack_crypto_deinit();
     l2cap_deinit();
     initialized = false;
+#endif
 }
 
 uint8_t ble_midi_server_stream_read(uint8_t max_bytes, uint8_t* midi_stream_bytes, uint16_t* timestamp)
@@ -260,4 +273,9 @@ void ble_midi_server_request_disconnect()
 bool ble_midi_server_is_connected()
 {
     return con_handle != HCI_CON_HANDLE_INVALID;
+}
+
+bool ble_midi_server_is_initialized()
+{
+    return initialized;
 }

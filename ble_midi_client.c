@@ -4,6 +4,7 @@
 #include "ble_midi_client.h"
 #include "ble_midi_pkt_codec.h"
 #include <inttypes.h>
+#include <stdio.h>
 // Fixed passkey - used with sm_pairing_peripheral. Passkey is random in general
 #define FIXED_PASSKEY 123456U
 
@@ -262,12 +263,29 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
     };
     switch (event) {
         case BTSTACK_EVENT_STATE:
+            if (btstack_event_state_get_state(packet) == HCI_STATE_OFF) {
+                printf("HCI power is safely off\r\n");
+                hci_remove_event_handler(&hci_event_callback_registration);
+                sm_remove_event_handler(&sm_event_callback_registration);
+
+                sm_deinit();
+                btstack_crypto_deinit();
+                l2cap_deinit();
+                if (client_profile_data != NULL) {
+                    free(client_profile_data);
+                    client_profile_data = NULL;
+                }
+                state = BLEMC_DEINIT;
+                con_handle = HCI_CON_HANDLE_INVALID;
+                midi_is_ready = false;
+                break;
+            }
             // BTstack activated, get started
             if (btstack_event_state_get_state(packet) != HCI_STATE_WORKING)
                 break;
             if (state == BLEMC_WAIT_FOR_SCAN_COMPLETE) {
                 midi_client.n_midi_peripherals = 0;
-                printf("BTstack activated, start active scanning\n");
+                printf("BTstack activated, start active scanning\r\n");
                 gap_set_scan_params(1,0x0030, 0x0030,0);
                 gap_start_scan();
             }
@@ -462,7 +480,10 @@ static void exit_client_mode()
 {
     if (ble_midi_client_is_connected())
         ble_midi_client_request_disconnect();
+    ble_midi_client_scan_end();
+    // Starts a process that ends with mmessage BTSTACK_EVENT_STATE with state HCI_STATE_OFF
     hci_power_control(HCI_POWER_OFF);
+#if 0
     hci_remove_event_handler(&hci_event_callback_registration);
     sm_remove_event_handler(&sm_event_callback_registration);
     ble_midi_client_scan_end();
@@ -477,6 +498,7 @@ static void exit_client_mode()
     state = BLEMC_DEINIT;
     con_handle = HCI_CON_HANDLE_INVALID;
     midi_is_ready = false;
+#endif
 }
 
 static void enter_client_mode()
@@ -647,6 +669,7 @@ bool ble_midi_client_request_connect(uint8_t idx)
         next_connect_bd_addr_type = midi_client.midi_peripherals[idx].addr_type;
         memcpy(next_connect_bd_addr, midi_client.midi_peripherals[idx].bdaddr, sizeof(next_connect_bd_addr));
     }
+    uint8_t result;
     switch(state) {
         case BLEMC_DEINIT:
             enter_client_mode();
@@ -656,7 +679,10 @@ bool ble_midi_client_request_connect(uint8_t idx)
             break;
         case BLEMC_IDLE:
             state = BLEMC_WAIT_FOR_CONNECTION;
-            gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
+            result = gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
+            if (ERROR_CODE_SUCCESS != result) {
+                printf("gap_connect: Bluetooth error code %u", result);
+            }
             break;
         case BLEMC_WAIT_FOR_DISCONNECTION:
         case BLEMC_WAIT_FOR_SERVICES:
@@ -666,14 +692,20 @@ bool ble_midi_client_request_connect(uint8_t idx)
             if (con_handle == HCI_CON_HANDLE_INVALID)
                 return false; // does not make sense
             state = BLEMC_WAIT_FOR_CONNECTION;
-            gap_disconnect(con_handle);
+            result = gap_disconnect(con_handle);
+            if (ERROR_CODE_SUCCESS != result) {
+                printf("gap_disconnect: Bluetooth error code %u", result);
+            }
             break;
         case BLEMC_WAIT_FOR_CONNECTION:
             if (con_handle != HCI_CON_HANDLE_INVALID) {
                 return false; // does not make sense
             }
             state = BLEMC_WAIT_FOR_CONNECTION;
-            gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
+            result = gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
+            if (ERROR_CODE_SUCCESS != result) {
+                printf("gap_connect: Bluetooth error code %u", result);
+            }
             break;
         case BLEMC_WAIT_FOR_SCAN_COMPLETE:
             if (con_handle != HCI_CON_HANDLE_INVALID) {
@@ -681,7 +713,10 @@ bool ble_midi_client_request_connect(uint8_t idx)
             }
             gap_stop_scan();
             state = BLEMC_WAIT_FOR_CONNECTION;
-            gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
+            result = gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
+            if (ERROR_CODE_SUCCESS != result) {
+                printf("gap_connect: Bluetooth error code %u", result);
+            }
             break;
         default:
             return false; // should not get here
@@ -695,7 +730,10 @@ void ble_midi_client_request_disconnect()
 {
     if (state > BLEMC_WAIT_FOR_SCAN_COMPLETE && ble_midi_client_is_connected()) {
         state = BLEMC_WAIT_FOR_DISCONNECTION;
-        gap_disconnect(con_handle);
+        uint8_t result = gap_disconnect(con_handle);
+        if (ERROR_CODE_SUCCESS != result) {
+            printf("gap_disconnect: Bluetooth error code %u", result);
+        }
     }
 }
 
@@ -757,4 +795,9 @@ bool ble_midi_client_is_connected(void)
 bool ble_midi_client_is_ready(void)
 {
     return midi_is_ready;
+}
+
+bool ble_midi_client_is_off(void)
+{
+    return state == BLEMC_DEINIT;
 }
