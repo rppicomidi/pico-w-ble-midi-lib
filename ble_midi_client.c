@@ -18,7 +18,7 @@ static enum {
     BLEMC_WAIT_FOR_ENABLE_NOTIFICATIONS_COMPLETE,
     BLEMC_WAIT_FOR_MIDI_DATA_RX,
     BLEMC_WAIT_FOR_DISCONNECTION,
-} state;
+} state = BLEMC_DEINIT;
 
 #define BLEMC_MAX_SCAN_ITEMS 16
 
@@ -192,7 +192,7 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
             }
             break;
         default:
-            printf("unhandled packet type %u", hci_event_packet_get_type(packet));
+            //printf("unhandled packet type %u", hci_event_packet_get_type(packet));
             break;
     }
 }
@@ -270,6 +270,7 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
 
                 sm_deinit();
                 btstack_crypto_deinit();
+                att_server_deinit();
                 l2cap_deinit();
                 if (client_profile_data != NULL) {
                     free(client_profile_data);
@@ -281,8 +282,10 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
                 break;
             }
             // BTstack activated, get started
-            if (btstack_event_state_get_state(packet) != HCI_STATE_WORKING)
+            if (btstack_event_state_get_state(packet) != HCI_STATE_WORKING) {
+                printf("client: unhandled BTSTACK_EVENT_STATE %u\r\n", btstack_event_state_get_state(packet));
                 break;
+            }
             if (state == BLEMC_WAIT_FOR_SCAN_COMPLETE) {
                 midi_client.n_midi_peripherals = 0;
                 printf("BTstack activated, start active scanning\r\n");
@@ -328,7 +331,12 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
                     if (state != BLEMC_WAIT_FOR_CONNECTION) {
                         break;
                     }
-                    printf("\nCONNECTED\n");
+                    if (hci_subevent_le_connection_complete_get_status(packet) == ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER) {
+                        printf("\nCONNECT REQUEST Canceled\r\n");
+                        state = BLEMC_IDLE;
+                        break;
+                    }
+                    printf("\nclient: CONNECTED status=%u\n", hci_subevent_le_connection_complete_get_status(packet));
                     con_handle = hci_subevent_le_connection_complete_get_connection_handle(packet);
                     // print connection parameters (without using float operations)
                     conn_interval = hci_subevent_le_connection_complete_get_conn_interval(packet);
@@ -360,7 +368,7 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
             }
             break;
         case HCI_EVENT_DISCONNECTION_COMPLETE:
-            printf("\nDISCONNECTED\n");
+            printf("\nclient: DISCONNECTED\n");
             if (listener_registered) {
                 listener_registered = false;
                 gatt_client_stop_listening_for_characteristic_value_updates(&notification_listener);
@@ -378,6 +386,7 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
             break;
 
         default:
+            //printf("client: unhandled HCI_EVENT %u\r\n", event);
             break;
     }
 }
@@ -579,6 +588,11 @@ void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len, io
 void ble_midi_client_deinit()
 {
     exit_client_mode();
+}
+
+void ble_midi_client_cancel_connection_request()
+{
+    gap_connect_cancel();
 }
 
 void ble_midi_client_set_last_connected(int addr_type, uint8_t* addr)
@@ -800,4 +814,9 @@ bool ble_midi_client_is_ready(void)
 bool ble_midi_client_is_off(void)
 {
     return state == BLEMC_DEINIT;
+}
+
+bool ble_midi_client_waiting_for_connection()
+{
+    return state == BLEMC_WAIT_FOR_CONNECTION;
 }

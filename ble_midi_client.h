@@ -200,6 +200,10 @@ bool ble_midi_client_is_ready(void);
  * @return true if the client is completely de-initialized
  */
 bool ble_midi_client_is_off(void);
+
+bool ble_midi_client_waiting_for_connection();
+
+void ble_midi_client_cancel_connection_request();
 #if defined __cplusplus
 }
 #endif
