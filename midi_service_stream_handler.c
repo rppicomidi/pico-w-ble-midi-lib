@@ -130,13 +130,15 @@ static void hci_packet_handler (uint8_t packet_type, uint16_t channel, uint8_t *
                     conn_interval = hci_subevent_le_connection_complete_get_conn_interval(packet);
                     printf("LE Connection - Connection Interval: %u.%02u ms\n", conn_interval * 125 / 100, 25 * (conn_interval & 3));
                     printf("LE Connection - Connection Latency: %u\n", hci_subevent_le_connection_complete_get_conn_latency(packet));
-
-                    // request min con interval 15 ms for iOS per Apple accessory design guidelines, so we have to allow it:
-                    // https://developer.apple.com/accessories/Accessory-Design-Guidelines.pdf
-                    printf("LE Connection - Request 7.5ms-15ms connection interval\n");
-                    result = gap_request_connection_parameter_update(con_handle, 6, 12, 0, 0x0048);
-                    if (result != ERROR_CODE_SUCCESS) {
-                        printf("gap_request_connection_parameter_update failed code=%u\r\n", result);
+                    if (conn_interval > 6) {
+                        // request min con interval 7.5ms. If the client cannot handle it, then we will hopefull get
+                        // get something shorter. For example, per iOS per Apple accessory design guidelines, we can get 15ms:
+                        // https://developer.apple.com/accessories/Accessory-Design-Guidelines.pdf
+                        printf("LE Connection - Request 7.5ms connection interval\n");
+                        result = gap_request_connection_parameter_update(con_handle, 6, 6, 0, 0x0048);
+                        if (result != ERROR_CODE_SUCCESS) {
+                            printf("gap_request_connection_parameter_update failed code=%u\r\n", result);
+                        }
                     }
                     break;
                 case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:

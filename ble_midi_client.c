@@ -364,6 +364,18 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
                     printf("- LE Connection 0x%04x: PHY update - using LE %s PHY now\n", con_handle,
                            phy_names[hci_subevent_le_phy_update_complete_get_tx_phy(packet)]);
                     break;
+                case HCI_SUBEVENT_LE_REMOTE_CONNECTION_PARAMETER_REQUEST:
+                    printf("HCI_SUBEVENT_LE_REMOTE_CONNECTION_PARAMETER_REQUEST\r\n");
+                    // TODO: Do we need to do anything, or is this all handled in the HCI layer?
+                    break;
+                case HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE:
+                    printf("HCI_SUBEVENT_LE_CONNECTION_UPDATE_COMPLETE\r\n");
+                    // print connection parameters (without using float operations)
+                    con_handle    = hci_subevent_le_connection_update_complete_get_connection_handle(packet);
+                    conn_interval = hci_subevent_le_connection_update_complete_get_conn_interval(packet);
+                    printf("LE Connection - Connection Param update - connection interval %u.%02u ms, latency %u\n", conn_interval * 125 / 100,
+                        25 * (conn_interval & 3), hci_subevent_le_connection_update_complete_get_conn_latency(packet));
+                    break;
                 default:
                     break;
             }
@@ -553,7 +565,11 @@ static void enter_client_mode()
     sm_set_authentication_requirements(secmask);
 
     // use MIDI connection parameters: connection scan interval 60ms, connection scan window 30ms, connectionconn interval min/max (* 1.25 ms), slave latency, supervision timeout, CE len min/max (* 0.6125 ms) 
-    gap_set_connection_parameters(96, 48, 6, 12, 4, 1000, 0x01, 6 * 2);
+    // min con interval 15 ms for iOS per Apple accessory design guidelines, so we have to allow it:
+    // https://developer.apple.com/accessories/Accessory-Design-Guidelines.pdf
+    // If your server can handled a shorter connection interval, please have it request
+    // to update the parameters to the shorter interval
+    gap_set_connection_parameters(96, 48, 6, 12, 0, 1000, 0x01, 6 * 2);
 }
 
 void ble_midi_client_init(const char* profile_name, uint8_t profile_name_len, io_capability_t iocaps_, uint8_t secmask_)
