@@ -414,6 +414,9 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
         case SM_EVENT_IDENTITY_RESOLVING_FAILED:
             printf("SM_EVENT_IDENTITY_RESOLVING_FAILED\r\n");
             break;
+        case SM_EVENT_IDENTITY_RESOLVING_SUCCEEDED:
+            printf("SM_EVENT_IDENTITY_RESOLVING_SUCCEEDED\r\n");
+            break;
         case SM_EVENT_JUST_WORKS_REQUEST:
             printf("Just works requested\n");
             sm_just_works_confirm(sm_event_just_works_request_get_handle(packet));
@@ -487,6 +490,7 @@ static void sm_packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *pa
             }
             break;
         default:
+            printf("unhandled SM event 0x%x\r\n",hci_event_packet_get_type(packet));
             break;
     }
 }
@@ -666,18 +670,9 @@ bool ble_midi_client_request_connect(uint8_t idx)
     if (idx > midi_client.n_midi_peripherals)
         return false;
     if (idx == 0) {
-#if 0
-        // TODO: for now use stored TLV info at index 15 as last connected
-        bd_addr_t entry_address;
-        int entry_address_type = (int) BD_ADDR_TYPE_UNKNOWN;
-        le_device_db_info(15, &entry_address_type, entry_address, NULL);
-        if (entry_address_type <= (int)BD_ADDR_TYPE_LE_RANDOM_IDENTITY) {
-            next_connect_bd_addr_type = entry_address_type;
-            memcpy(next_connect_bd_addr, entry_address, sizeof(next_connect_bd_addr));
-        }
-#endif
         if (last_connected_bd_addr_type <= (int)BD_ADDR_TYPE_LE_RANDOM_IDENTITY) {
-            next_connect_bd_addr_type = last_connected_bd_addr_type;
+            // for some reason, gap_connect() runs into issues if the addr type is BD_ADDR_TYPE_LE_PUBLIC_IDENTITY but works if it is BD_ADDR_TYPE_LE_PUBLIC
+            next_connect_bd_addr_type = (last_connected_bd_addr_type == BD_ADDR_TYPE_LE_PUBLIC_IDENTITY) ? BD_ADDR_TYPE_LE_PUBLIC: last_connected_bd_addr_type;
             memcpy(next_connect_bd_addr, last_connected_bd_addr, sizeof(next_connect_bd_addr));
         }
         else {
@@ -686,7 +681,8 @@ bool ble_midi_client_request_connect(uint8_t idx)
     }
     else {
         idx -= 1;
-        next_connect_bd_addr_type = midi_client.midi_peripherals[idx].addr_type;
+        // for some reason, gap_connect() runs into issues if the addr type is BD_ADDR_TYPE_LE_PUBLIC_IDENTITY but works if it is BD_ADDR_TYPE_LE_PUBLIC
+        next_connect_bd_addr_type = (midi_client.midi_peripherals[idx].addr_type == BD_ADDR_TYPE_LE_PUBLIC_IDENTITY) ? BD_ADDR_TYPE_LE_PUBLIC: midi_client.midi_peripherals[idx].addr_type;
         memcpy(next_connect_bd_addr, midi_client.midi_peripherals[idx].bdaddr, sizeof(next_connect_bd_addr));
     }
     uint8_t result;
