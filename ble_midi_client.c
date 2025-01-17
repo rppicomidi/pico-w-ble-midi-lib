@@ -57,6 +57,7 @@ static uint8_t *client_profile_data = NULL;
 static io_capability_t iocaps;
 static uint8_t secmask;
 static bool midi_is_ready = false;
+static bool keep_client_connected = false;
 static void printUUID(uint8_t * uuid128, uint16_t uuid16){
     if (uuid16){
         printf("%04x",uuid16);
@@ -373,16 +374,21 @@ static void handle_hci_event(uint8_t packet_type, uint16_t channel, uint8_t *pac
                 listener_registered = false;
                 gatt_client_stop_listening_for_characteristic_value_updates(&notification_listener);
             }
-            if (state == BLEMC_WAIT_FOR_CONNECTION) // then disconnected from previous to connect to next
-                gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
-            else {
-                state = BLEMC_IDLE;
-                midi_client.n_midi_peripherals = 0;
-            }
+            midi_client.n_midi_peripherals = 0;
             midi_service_emit_state(con_handle, false); // pass the connection handle to the client application to this library
             cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, false);
             con_handle = HCI_CON_HANDLE_INVALID;
             midi_is_ready = false;
+            if ((keep_client_connected && state != BLEMC_WAIT_FOR_DISCONNECTION) || state == BLEMC_WAIT_FOR_CONNECTION) { // then disconnected from previous to connect to next
+                state = BLEMC_WAIT_FOR_CONNECTION;
+                uint8_t status = gap_connect(next_connect_bd_addr, next_connect_bd_addr_type);
+                if (status != ERROR_CODE_SUCCESS) {
+                    printf("reconnect failed code=%u\r\n", status);
+                }
+            }
+            else {
+                state = BLEMC_IDLE;
+            }
             break;
 
         default:
@@ -819,4 +825,14 @@ bool ble_midi_client_is_off(void)
 bool ble_midi_client_waiting_for_connection()
 {
     return state == BLEMC_WAIT_FOR_CONNECTION;
+}
+
+bool ble_midi_client_get_keep_connected()
+{
+    return keep_client_connected;
+}
+
+void ble_midi_client_set_keep_connected(bool keep_client_connected_)
+{
+    keep_client_connected = keep_client_connected_;
 }

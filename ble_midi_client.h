@@ -204,6 +204,9 @@ bool ble_midi_client_is_off(void);
 bool ble_midi_client_waiting_for_connection();
 
 void ble_midi_client_cancel_connection_request();
+
+bool ble_midi_client_get_keep_connected();
+void ble_midi_client_set_keep_connected(bool keep_client_connected_);
 #if defined __cplusplus
 }
 #endif
